@@ -4,15 +4,16 @@
     update_cache: yes
     cache_valid_time: 3600
 
-- name: Installer slapd, ldap-utils et phpldapadmin
+- name: Installer les paquets LDAP
   apt:
     name:
       - slapd
       - ldap-utils
-      - phpldapadmin
+      - ldap-account-manager
+      - apache2
     state: present
 
-- name: Configurer le domaine LDAP avec debconf-set-selections
+- name: Configurer le domaine LDAP
   shell: |
     echo "slapd slapd/domain string nodomain" | debconf-set-selections
     echo "slapd slapd/organization string SEIMP" | debconf-set-selections
@@ -23,77 +24,142 @@
 
 - name: Reconfigurer slapd
   shell: dpkg-reconfigure -f noninteractive slapd
-  register: reconfigure_result
 
-- name: S'assurer que slapd tourne
+- name: Forcer slapd à écouter sur TCP 389
+  lineinfile:
+    path: /etc/default/slapd
+    regexp: '^SLAPD_SERVICES='
+    line: 'SLAPD_SERVICES="ldap://0.0.0.0:389/ ldapi:///"'
+
+- name: Démarrer slapd
   systemd:
     name: slapd
-    state: started
+    state: restarted
     enabled: yes
 
-- name: Attendre que slapd soit prêt
+- name: Attendre slapd sur port 389
   wait_for:
+    host: 127.0.0.1
     port: 389
     timeout: 30
 
-- name: Générer le hash du mot de passe admin123
+- name: Générer hash admin
   command: slappasswd -s admin123
   register: hashed_password
   changed_when: false
 
-- name: Forcer le mot de passe admin dans LDAP
+- name: Forcer mot de passe admin
   shell: |
-    ldapmodify -Y EXTERNAL -H ldapi:/// <<EOF
+    ldapmodify -Y EXTERNAL -H ldapi:/// <<LDIF
     dn: olcDatabase={1}mdb,cn=config
     replace: olcRootPW
     olcRootPW: {{ hashed_password.stdout }}
-    EOF
-  register: force_password
-  changed_when: force_password.rc == 0
+    LDIF
 
-- name: Vérifier que l'authentification fonctionne
-  command: ldapwhoami -x -D cn=admin,dc=nodomain -w admin123
-  register: auth_test
-  retries: 3
-  delay: 5
-  until: auth_test.rc == 0
-  changed_when: false
-
-- name: Créer le fichier LDIF des groupes
+- name: Créer fichiers LDIF groupes
   template:
     src: ldap_groups.ldif.j2
     dest: /tmp/ldap_groups.ldif
     mode: 0644
 
-- name: Ajouter les groupes LDAP
+- name: Ajouter groupes
   command: ldapadd -x -D cn=admin,dc=nodomain -w admin123 -f /tmp/ldap_groups.ldif
   register: groups_result
   failed_when: groups_result.rc != 0 and "already exists" not in groups_result.stderr
   ignore_errors: yes
 
-- name: Créer le fichier LDIF des utilisateurs
+- name: Créer fichiers LDIF utilisateurs
   template:
     src: ldap_users.ldif.j2
     dest: /tmp/ldap_users.ldif
     mode: 0644
 
-- name: Ajouter les utilisateurs LDAP
+- name: Ajouter utilisateurs
   command: ldapadd -x -D cn=admin,dc=nodomain -w admin123 -f /tmp/ldap_users.ldif
   register: users_result
   failed_when: users_result.rc != 0 and "already exists" not in users_result.stderr
   ignore_errors: yes
 
-- name: Configurer phpLDAPadmin
-  template:
-    src: config.php.j2
-    dest: /etc/phpldapadmin/config.php
-    mode: 0644
-  notify: restart apache2
+- name: Supprimer tous les anciens fichiers LAM mal placés
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /usr/share/ldap-account-manager/config/lam.conf
+    - /usr/share/ldap-account-manager/config/profiles/lam.conf
+    - /etc/ldap-account-manager/lam.conf
+    - /var/lib/ldap-account-manager/config/lam.conf
 
-- name: Activer phpLDAPadmin
-  command: a2enconf phpldapadmin
+- name: Créer config.cfg LAM
+  copy:
+    dest: /usr/share/ldap-account-manager/config/config.cfg
+    owner: www-data
+    group: www-data
+    mode: 0600
+    content: |
+      # password to add/delete/rename configuration profiles (default: lam)
+      password: {SSHA}D6AaX93kPmck9wAxNlq3GF93S7A= R7gkjQ==
+      # default profile, without ".conf"
+      default: lam
+      # log level
+      logLevel: 4
+      # log destination
+      logDestination: SYSLOG
+      configDatabaseType: files
+      configDatabaseServer:
+      configDatabasePort:
+      configDatabaseName:
+      configDatabaseUser:
+      configDatabasePassword:
+      license:
+
+- name: Créer lam.conf avec le format exact du sample
+  copy:
+    dest: /usr/share/ldap-account-manager/config/lam.conf
+    owner: www-data
+    group: www-data
+    mode: 0600
+    content: |
+      # LDAP Account Manager configuration
+      ServerURL: ldap://127.0.0.1:389
+      Admins: cn=admin,dc=nodomain
+      Passwd: lam
+      tools: treeViewSuffix: dc=nodomain
+      defaultLanguage: en_US.utf8
+      scriptPath:
+      scriptServer:
+      scriptRights: 750
+      cachetimeout: 5
+      searchLimit: 0
+      modules: posixAccount_user_minUID: 1000
+      modules: posixAccount_user_maxUID: 30000
+      modules: posixGroup_group_minGID: 1000
+      modules: posixGroup_group_maxGID: 20000
+      modules: posixAccount_user_uidGeneratorUsers: range
+      modules: posixAccount_group_gidGeneratorUsers: range
+      modules: posixGroup_pwdHash: SSHA
+      modules: posixAccount_pwdHash: SSHA
+      activeTypes: user,group
+      types: suffix_user: ou=people,dc=nodomain
+      types: attr_user: #uid;#givenName;#sn;#uidNumber;#gidNumber
+      types: modules_user: inetOrgPerson,posixAccount,shadowAccount
+      types: suffix_group: ou=groups,dc=nodomain
+      types: attr_group: #cn;#gidNumber;#memberUID;#description
+      types: modules_group: posixGroup
+      lamProMailSubject: Your password was reset
+      lamProMailText: Dear @@givenName@@ @@sn@@,+::++::+your password was reset to: @@newPassword@@+::++::++::+Best regards+::++::+deskside support+::+
+
+- name: Fixer permissions config LAM
+  file:
+    path: /usr/share/ldap-account-manager/config
+    state: directory
+    owner: www-data
+    group: www-data
+    recurse: yes
+
+- name: Activer LAM dans Apache
+  command: a2enconf ldap-account-manager
   ignore_errors: yes
-  notify: restart apache2
 
 - name: Redémarrer Apache
   systemd:
