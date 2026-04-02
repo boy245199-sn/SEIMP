@@ -1,0 +1,146 @@
+---
+- name: Mise à jour des paquets
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+
+- name: Installation des dépendances
+  apt:
+    name:
+      - apache2
+      - mariadb-server
+      - mariadb-client
+      - php7.4
+      - php7.4-cli
+      - php7.4-common
+      - php7.4-curl
+      - php7.4-gd
+      - php7.4-intl
+      - php7.4-mbstring
+      - php7.4-mysql
+      - php7.4-xml
+      - php7.4-zip
+      - php7.4-bcmath
+      - php7.4-gmp
+      - php7.4-ldap
+      - libapache2-mod-php7.4
+      - unzip
+      - wget
+      - curl
+      - python3-pip
+    state: present
+
+- name: Installer PyMySQL pour Ansible
+  pip:
+    name: PyMySQL
+    state: present
+    executable: pip3
+
+- name: Télécharger Nextcloud
+  get_url:
+    url: https://download.nextcloud.com/server/releases/latest.zip
+    dest: /tmp/nextcloud.zip
+    timeout: 120
+
+- name: Décompresser Nextcloud
+  unarchive:
+    src: /tmp/nextcloud.zip
+    dest: /var/www/html/
+    remote_src: yes
+    owner: www-data
+    group: www-data
+
+- name: Créer le répertoire data
+  file:
+    path: /var/www/html/nextcloud/data
+    state: directory
+    owner: www-data
+    group: www-data
+    mode: 0750
+
+- name: Configurer Apache
+  template:
+    src: nextcloud.conf.j2
+    dest: /etc/apache2/sites-available/nextcloud.conf
+    mode: 0644
+  notify: restart apache2
+
+- name: Désactiver le site par défaut
+  command: a2dissite 000-default.conf
+  ignore_errors: yes
+  notify: restart apache2
+
+- name: Activer le site Nextcloud
+  command: a2ensite nextcloud.conf
+  notify: restart apache2
+
+- name: Activer les modules Apache
+  command: "a2enmod {{ item }}"
+  loop:
+    - rewrite
+    - headers
+    - env
+    - dir
+    - mime
+  notify: restart apache2
+  ignore_errors: yes
+
+- name: Démarrer MariaDB
+  systemd:
+    name: mariadb
+    state: started
+    enabled: yes
+
+- name: Créer la base de données
+  mysql_db:
+    name: nextcloud
+    state: present
+    login_unix_socket: /var/run/mysqld/mysqld.sock
+
+- name: Créer l'utilisateur MySQL
+  mysql_user:
+    name: nextcloud_user
+    password: nextcloud_pass
+    priv: 'nextcloud.*:ALL'
+    state: present
+    login_unix_socket: /var/run/mysqld/mysqld.sock
+
+- name: Installer Nextcloud
+  command: |
+    sudo -u www-data php /var/www/html/nextcloud/occ maintenance:install \
+      --database mysql \
+      --database-name nextcloud \
+      --database-user nextcloud_user \
+      --database-pass nextcloud_pass \
+      --admin-user admin \
+      --admin-pass admin123 \
+      --data-dir /var/www/html/nextcloud/data
+  args:
+    creates: /var/www/html/nextcloud/config/config.php
+
+- name: Configurer les domaines trusted
+  lineinfile:
+    path: /var/www/html/nextcloud/config/config.php
+    insertafter: "'trusted_domains' =>"
+    line: "  0 => '192.168.10.11',"
+    state: present
+
+- name: Configurer PHP
+  template:
+    src: nextcloud.ini.j2
+    dest: /etc/php/7.4/apache2/conf.d/99-nextcloud.ini
+    mode: 0644
+  notify: restart apache2
+
+- name: Configurer les permissions
+  file:
+    path: /var/www/html/nextcloud
+    owner: www-data
+    group: www-data
+    recurse: yes
+
+- name: Redémarrer Apache
+  systemd:
+    name: apache2
+    state: restarted
+    enabled: yes

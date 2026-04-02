@@ -4,3 +4,11 @@
   become: yes
   roles:
     - ldap
+  tags: ldap
+
+- name: Installation de Nextcloud
+  hosts: nextcloud
+  become: yes
+  roles:
+    - nextcloud
+  tags: nextcloud

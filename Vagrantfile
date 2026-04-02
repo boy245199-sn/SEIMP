@@ -1,8 +1,7 @@
 Vagrant.configure("2") do |config|
-  config.vm.box = "ubuntu/focal64"
-  config.vm.boot_timeout = 600   # évite le timeout sur Windows
+  config.vm.boot_timeout = 600
+  config.vm.box = "ubuntu/jammy64"  # Ubuntu 22.04
 
-  # Définition des VMs (nom => IP, mémoire, CPU)
   machines = {
     "ldap"          => { ip: "192.168.10.10", memory: 1024, cpus: 1 },
     "nextcloud"     => { ip: "192.168.10.11", memory: 2048, cpus: 2 },
