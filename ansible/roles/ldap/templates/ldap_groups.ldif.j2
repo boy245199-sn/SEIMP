@@ -1,0 +1,22 @@
+dn: ou=groups,dc=nodomain
+objectClass: organizationalUnit
+ou: groups
+
+dn: ou=people,dc=nodomain
+objectClass: organizationalUnit
+ou: people
+
+dn: cn=admins,ou=groups,dc=nodomain
+objectClass: posixGroup
+cn: admins
+gidNumber: 10000
+
+dn: cn=employees,ou=groups,dc=nodomain
+objectClass: posixGroup
+cn: employees
+gidNumber: 10001
+
+dn: cn=it_team,ou=groups,dc=nodomain
+objectClass: posixGroup
+cn: it_team
+gidNumber: 10002

@@ -1,0 +1,6 @@
+---
+- name: Configuration du serveur LDAP
+  hosts: ldap
+  become: yes
+  roles:
+    - ldap

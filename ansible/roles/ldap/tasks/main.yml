@@ -1,0 +1,61 @@
+---
+- name: Mise à jour des paquets
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+
+- name: Installer slapd, ldap-utils et phpldapadmin
+  apt:
+    name:
+      - slapd
+      - ldap-utils
+      - phpldapadmin
+    state: present
+
+- name: S'assurer que slapd tourne
+  systemd:
+    name: slapd
+    state: started
+    enabled: yes
+
+- name: Déployer le LDIF des groupes
+  template:
+    src: ldap_groups.ldif.j2
+    dest: /tmp/ldap_groups.ldif
+    mode: 0644
+
+- name: Ajouter les groupes LDAP (ignorer si déjà existants)
+  command: ldapadd -x -D cn=admin,dc=nodomain -w admin123 -f /tmp/ldap_groups.ldif
+  register: groups_result
+  failed_when: groups_result.rc != 0 and "already exists" not in groups_result.stderr
+  ignore_errors: yes
+
+- name: Déployer le LDIF des utilisateurs
+  template:
+    src: ldap_users.ldif.j2
+    dest: /tmp/ldap_users.ldif
+    mode: 0644
+
+- name: Ajouter les utilisateurs LDAP (ignorer si déjà existants)
+  command: ldapadd -x -D cn=admin,dc=nodomain -w admin123 -f /tmp/ldap_users.ldif
+  register: users_result
+  failed_when: users_result.rc != 0 and "already exists" not in users_result.stderr
+  ignore_errors: yes
+
+- name: Configurer phpLDAPadmin
+  template:
+    src: config.php.j2
+    dest: /etc/phpldapadmin/config.php
+    mode: 0644
+  notify: restart apache2
+
+- name: Activer phpLDAPadmin dans Apache
+  command: a2enconf phpldapadmin
+  ignore_errors: yes
+  notify: restart apache2
+
+- name: Redémarrer Apache
+  systemd:
+    name: apache2
+    state: restarted
+    enabled: yes
