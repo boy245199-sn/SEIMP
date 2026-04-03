@@ -12,3 +12,10 @@
   roles:
     - nextcloud
   tags: nextcloud
+
+- name: Installation de Odoo ERP
+  hosts: odoo
+  become: yes
+  roles:
+    - odoo
+  tags: odoo

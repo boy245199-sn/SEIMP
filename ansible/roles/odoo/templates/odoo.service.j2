@@ -1,0 +1,15 @@
+[Unit]
+Description=Odoo ERP
+After=network.target postgresql.service
+
+[Service]
+Type=simple
+User=odoo
+Group=odoo
+ExecStart=/usr/bin/python3 /opt/odoo/odoo-17/odoo-bin -c /etc/odoo.conf
+Restart=on-failure
+RestartSec=5
+LimitNOFILE=infinity
+
+[Install]
+WantedBy=multi-user.target
