@@ -4,29 +4,45 @@
     update_cache: yes
     cache_valid_time: 3600
 
-- name: Installation des dépendances
+- name: Installer software-properties-common
+  apt:
+    name: software-properties-common
+    state: present
+
+- name: Installer unzip et outils
+  apt:
+    name:
+      - unzip
+      - wget
+      - curl
+    state: present
+
+- name: Ajouter le dépôt PHP 8.2
+  apt_repository:
+    repo: ppa:ondrej/php
+    state: present
+    update_cache: yes
+
+- name: Installation des dépendances PHP 8.2
   apt:
     name:
       - apache2
       - mariadb-server
       - mariadb-client
-      - php7.4
-      - php7.4-cli
-      - php7.4-common
-      - php7.4-curl
-      - php7.4-gd
-      - php7.4-intl
-      - php7.4-mbstring
-      - php7.4-mysql
-      - php7.4-xml
-      - php7.4-zip
-      - php7.4-bcmath
-      - php7.4-gmp
-      - php7.4-ldap
-      - libapache2-mod-php7.4
-      - unzip
-      - wget
-      - curl
+      - php8.2
+      - php8.2-cli
+      - php8.2-common
+      - php8.2-curl
+      - php8.2-gd
+      - php8.2-intl
+      - php8.2-mbstring
+      - php8.2-mysql
+      - php8.2-xml
+      - php8.2-zip
+      - php8.2-bcmath
+      - php8.2-gmp
+      - php8.2-ldap
+      - libapache2-mod-php8.2
       - python3-pip
     state: present
 
@@ -36,11 +52,39 @@
     state: present
     executable: pip3
 
-- name: Télécharger Nextcloud
+- name: Arrêter Apache
+  systemd:
+    name: apache2
+    state: stopped
+
+- name: Supprimer l'ancienne installation
+  shell: |
+    rm -rf /var/www/html/nextcloud
+    rm -rf /var/www/html/nextcloud_backup
+    rm -f /tmp/nextcloud.zip
+    mysql -e "DROP DATABASE IF EXISTS nextcloud" 2>/dev/null || true
+    mysql -e "DROP USER IF EXISTS 'nextcloud_user'@'localhost'" 2>/dev/null || true
+  ignore_errors: yes
+
+- name: Recréer la base de données
+  mysql_db:
+    name: nextcloud
+    state: present
+    login_unix_socket: /var/run/mysqld/mysqld.sock
+
+- name: Recréer l'utilisateur MySQL
+  mysql_user:
+    name: nextcloud_user
+    password: nextcloud_pass
+    priv: 'nextcloud.*:ALL'
+    state: present
+    login_unix_socket: /var/run/mysqld/mysqld.sock
+
+- name: Télécharger Nextcloud 27
   get_url:
-    url: https://download.nextcloud.com/server/releases/latest.zip
+    url: https://download.nextcloud.com/server/releases/nextcloud-27.1.11.zip
     dest: /tmp/nextcloud.zip
-    timeout: 120
+    timeout: 300
 
 - name: Décompresser Nextcloud
   unarchive:
@@ -58,21 +102,32 @@
     group: www-data
     mode: 0750
 
-- name: Configurer Apache
-  template:
-    src: nextcloud.conf.j2
+- name: Créer la configuration Apache
+  copy:
+    content: |
+      <VirtualHost *:80>
+          ServerName 192.168.10.11
+          DocumentRoot /var/www/html/nextcloud
+          
+          <Directory /var/www/html/nextcloud>
+              Options +FollowSymlinks
+              AllowOverride All
+              Require all granted
+              Satisfy Any
+          </Directory>
+          
+          ErrorLog ${APACHE_LOG_DIR}/nextcloud_error.log
+          CustomLog ${APACHE_LOG_DIR}/nextcloud_access.log combined
+      </VirtualHost>
     dest: /etc/apache2/sites-available/nextcloud.conf
     mode: 0644
-  notify: restart apache2
 
 - name: Désactiver le site par défaut
   command: a2dissite 000-default.conf
   ignore_errors: yes
-  notify: restart apache2
 
 - name: Activer le site Nextcloud
   command: a2ensite nextcloud.conf
-  notify: restart apache2
 
 - name: Activer les modules Apache
   command: "a2enmod {{ item }}"
@@ -82,7 +137,6 @@
     - env
     - dir
     - mime
-  notify: restart apache2
   ignore_errors: yes
 
 - name: Démarrer MariaDB
@@ -91,20 +145,6 @@
     state: started
     enabled: yes
 
-- name: Créer la base de données
-  mysql_db:
-    name: nextcloud
-    state: present
-    login_unix_socket: /var/run/mysqld/mysqld.sock
-
-- name: Créer l'utilisateur MySQL
-  mysql_user:
-    name: nextcloud_user
-    password: nextcloud_pass
-    priv: 'nextcloud.*:ALL'
-    state: present
-    login_unix_socket: /var/run/mysqld/mysqld.sock
-
 - name: Installer Nextcloud
   command: |
     sudo -u www-data php /var/www/html/nextcloud/occ maintenance:install \
@@ -112,35 +152,54 @@
       --database-name nextcloud \
       --database-user nextcloud_user \
       --database-pass nextcloud_pass \
-      --admin-user admin \
-      --admin-pass admin123 \
+      --admin-user leuz \
+      --admin-pass leuz123 \
       --data-dir /var/www/html/nextcloud/data
   args:
     creates: /var/www/html/nextcloud/config/config.php
 
 - name: Configurer les domaines trusted
-  lineinfile:
-    path: /var/www/html/nextcloud/config/config.php
-    insertafter: "'trusted_domains' =>"
-    line: "  0 => '192.168.10.11',"
-    state: present
+  shell: |
+    sudo -u www-data php /var/www/html/nextcloud/occ config:system:set trusted_domains 0 --value="192.168.10.11"
+    sudo -u www-data php /var/www/html/nextcloud/occ config:system:set overwrite.cli.url --value="http://192.168.10.11"
 
 - name: Configurer PHP
-  template:
-    src: nextcloud.ini.j2
-    dest: /etc/php/7.4/apache2/conf.d/99-nextcloud.ini
+  copy:
+    content: |
+      memory_limit = 1024M
+      upload_max_filesize = 512M
+      post_max_size = 512M
+      max_execution_time = 3600
+      max_input_time = 3600
+      date.timezone = UTC
+      opcache.enable = 1
+      opcache.memory_consumption = 128
+      opcache.interned_strings_buffer = 8
+      opcache.max_accelerated_files = 10000
+      opcache.revalidate_freq = 1
+    dest: /etc/php/8.2/apache2/conf.d/99-nextcloud.ini
     mode: 0644
-  notify: restart apache2
 
 - name: Configurer les permissions
-  file:
-    path: /var/www/html/nextcloud
-    owner: www-data
-    group: www-data
-    recurse: yes
+  shell: |
+    chown -R www-data:www-data /var/www/html/nextcloud
+    find /var/www/html/nextcloud -type d -exec chmod 755 {} \;
+    find /var/www/html/nextcloud -type f -exec chmod 644 {} \;
+    chmod 750 /var/www/html/nextcloud/data
+    chmod 750 /var/www/html/nextcloud/config
 
 - name: Redémarrer Apache
   systemd:
     name: apache2
     state: restarted
     enabled: yes
+
+- name: Vérifier Nextcloud
+  uri:
+    url: http://192.168.10.11
+    status_code: 200
+    timeout: 30
+  register: result
+  until: result.status == 200
+  retries: 10
+  delay: 10

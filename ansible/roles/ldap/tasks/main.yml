@@ -17,8 +17,8 @@
   shell: |
     echo "slapd slapd/domain string nodomain" | debconf-set-selections
     echo "slapd slapd/organization string SEIMP" | debconf-set-selections
-    echo "slapd slapd/internal/admin-password password admin123" | debconf-set-selections
-    echo "slapd slapd/internal/admin-password_again password admin123" | debconf-set-selections
+    echo "slapd slapd/internal/admin-password password niang123" | debconf-set-selections
+    echo "slapd slapd/internal/admin-password_again password niang123" | debconf-set-selections
     echo "slapd slapd/backend select MDB" | debconf-set-selections
   changed_when: false
 
@@ -44,7 +44,7 @@
     timeout: 30
 
 - name: Générer hash admin
-  command: slappasswd -s admin123
+  command: slappasswd -s niang123
   register: hashed_password
   changed_when: false
 
@@ -63,7 +63,7 @@
     mode: 0644
 
 - name: Ajouter groupes
-  command: ldapadd -x -D cn=admin,dc=nodomain -w admin123 -f /tmp/ldap_groups.ldif
+  command: ldapadd -x -D cn=admin,dc=nodomain -w niang123 -f /tmp/ldap_groups.ldif
   register: groups_result
   failed_when: groups_result.rc != 0 and "already exists" not in groups_result.stderr
   ignore_errors: yes
@@ -75,7 +75,7 @@
     mode: 0644
 
 - name: Ajouter utilisateurs
-  command: ldapadd -x -D cn=admin,dc=nodomain -w admin123 -f /tmp/ldap_users.ldif
+  command: ldapadd -x -D cn=admin,dc=nodomain -w niang123 -f /tmp/ldap_users.ldif
   register: users_result
   failed_when: users_result.rc != 0 and "already exists" not in users_result.stderr
   ignore_errors: yes
