@@ -1,0 +1,1265 @@
+---
+- name: Déployer l'interface de gestion des employés SEIMP
+  hosts: ldap
+  become: yes
+  tasks:
+    - name: Installer PHP et extensions
+      apt:
+        name:
+          - php
+          - php-ldap
+          - php-gd
+          - php-mbstring
+          - libapache2-mod-php
+        state: present
+
+    - name: Créer les répertoires
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: 0775
+        owner: www-data
+        group: www-data
+      loop:
+        - /var/www/html/photos
+        - /var/www/html/data
+
+    - name: Créer le fichier JSON vide
+      copy:
+        dest: /var/www/html/data/employees.json
+        content: '[]'
+        mode: 0664
+        owner: www-data
+        group: www-data
+
+    - name: Activer le module rewrite Apache
+      command: a2enmod rewrite
+      ignore_errors: yes
+
+    - name: Déployer employes.php
+      copy:
+        dest: /var/www/html/employes.php
+        mode: 0644
+        owner: www-data
+        group: www-data
+        content: |
+          <?php
+          session_start();
+          if (!isset($_SERVER['PHP_AUTH_USER'])) {
+              header('WWW-Authenticate: Basic realm="SEIMP RH"');
+              header('HTTP/1.0 401 Unauthorized');
+              exit('Accès non autorisé');
+          }
+          $valid_users = ['admin' => 'niang123', 'badge_manager' => 'badge123'];
+          if (!isset($valid_users[$_SERVER['PHP_AUTH_USER']]) ||
+              $valid_users[$_SERVER['PHP_AUTH_USER']] !== $_SERVER['PHP_AUTH_PW']) {
+              header('WWW-Authenticate: Basic realm="SEIMP RH"');
+              header('HTTP/1.0 401 Unauthorized');
+              exit('Identifiants invalides');
+          }
+
+          function ldap_connect_admin() {
+              $conn = ldap_connect("ldap://127.0.0.1:389");
+              ldap_set_option($conn, LDAP_OPT_PROTOCOL_VERSION, 3);
+              ldap_set_option($conn, LDAP_OPT_REFERRALS, 0);
+              ldap_set_option($conn, LDAP_OPT_X_TLS_REQUIRE_CERT, LDAP_OPT_X_TLS_NEVER);
+              $bind = @ldap_bind($conn, "cn=admin,dc=nodomain", "niang123");
+              return $bind ? $conn : false;
+          }
+
+          function make_ssha($password) {
+              $salt = random_bytes(8);
+              return '{SSHA}' . base64_encode(sha1($password . $salt, true) . $salt);
+          }
+
+          $data_file = '/var/www/html/data/employees.json';
+          $photo_dir = '/var/www/html/photos/';
+          $employees = json_decode(file_get_contents($data_file), true) ?: [];
+          $message = "";
+
+          $departements = [
+              'direction'    => ['label' => 'Direction Générale',         'gid' => 10000, 'icon' => '🏛️',  'color' => '#7c3aed'],
+              'it'           => ['label' => 'Informatique & Tech',        'gid' => 10002, 'icon' => '💻',  'color' => '#2563eb'],
+              'securite'     => ['label' => 'Sécurité',                   'gid' => 10003, 'icon' => '🛡️',  'color' => '#dc2626'],
+              'menage'       => ['label' => 'Ménage & Propreté',          'gid' => 10004, 'icon' => '🧹',  'color' => '#0891b2'],
+              'commercial'   => ['label' => 'Commercial',                 'gid' => 10001, 'icon' => '📈',  'color' => '#059669'],
+              'finance'      => ['label' => 'Finance & Comptabilité',     'gid' => 10001, 'icon' => '💰',  'color' => '#d97706'],
+              'rh'           => ['label' => 'Ressources Humaines',        'gid' => 10001, 'icon' => '👥',  'color' => '#db2777'],
+              'logistique'   => ['label' => 'Logistique & Transport',     'gid' => 10001, 'icon' => '🚚',  'color' => '#ea580c'],
+              'cantine'      => ['label' => 'Restauration',               'gid' => 10004, 'icon' => '🍽️',  'color' => '#65a30d'],
+              'juridique'    => ['label' => 'Juridique',                  'gid' => 10001, 'icon' => '⚖️',  'color' => '#475569'],
+              'marketing'    => ['label' => 'Marketing & Communication',  'gid' => 10001, 'icon' => '📣',  'color' => '#e11d48'],
+              'production'   => ['label' => 'Production & Opérations',    'gid' => 10005, 'icon' => '⚙️',  'color' => '#57534e'],
+              'qualite'      => ['label' => 'Qualité & Conformité',       'gid' => 10005, 'icon' => '✅',  'color' => '#0d9488'],
+              'achats'       => ['label' => 'Achats & Approvisionnement', 'gid' => 10001, 'icon' => '🛒',  'color' => '#7c3aed'],
+              'audit'        => ['label' => 'Audit & Contrôle Interne',   'gid' => 10001, 'icon' => '🔍',  'color' => '#0369a1'],
+              'maintenance'  => ['label' => 'Maintenance & Technique',    'gid' => 10005, 'icon' => '🔧',  'color' => '#92400e'],
+              'communication'=> ['label' => 'Communication Externe',      'gid' => 10001, 'icon' => '📡',  'color' => '#6d28d9'],
+              'formation'    => ['label' => 'Formation & Développement',  'gid' => 10001, 'icon' => '🎓',  'color' => '#0891b2'],
+              'medical'      => ['label' => 'Médical & Santé',            'gid' => 10006, 'icon' => '🏥',  'color' => '#be185d'],
+              'reception'    => ['label' => 'Accueil & Réception',        'gid' => 10004, 'icon' => '🤝',  'color' => '#047857'],
+              'projet'       => ['label' => 'Gestion de Projets',         'gid' => 10001, 'icon' => '📋',  'color' => '#1d4ed8'],
+              'data'         => ['label' => 'Data & Business Intelligence','gid' => 10002, 'icon' => '📊',  'color' => '#7e22ce'],
+          ];
+
+          $postes = [
+              // Direction
+              'Directeur Général','Directeur Adjoint','Directeur Administratif','Directeur Technique',
+              'Directeur Commercial','Directeur Financier','Directeur des Opérations',
+              // Management
+              'Manager','Chef de Département','Chef de Service','Chef de Projet','Chef d\'Équipe',
+              'Coordinateur','Superviseur','Responsable de Site',
+              // IT & Tech
+              'Développeur Web','Développeur Mobile','Développeur Full Stack','Développeur Backend',
+              'Développeur Frontend','Administrateur Système','Administrateur Réseau','Administrateur Base de Données',
+              'Ingénieur DevOps','Architecte Logiciel','Technicien IT','Analyste Programmeur',
+              'Responsable Sécurité Informatique','Data Scientist','Data Analyst','Data Engineer',
+              'Business Intelligence Analyst','Chef de Projet IT',
+              // Finance & Comptabilité
+              'Comptable','Comptable Principal','Contrôleur Financier','Auditeur Interne','Auditeur Externe',
+              'Analyste Financier','Trésorier','Gestionnaire de Paie','Fiscaliste',
+              // Commercial & Ventes
+              'Commercial','Chargé de Clientèle','Responsable Ventes','Responsable Grand Compte',
+              'Chargé d\'Affaires','Représentant Commercial','Téléconseiller','Account Manager',
+              // RH
+              'Chargé RH','Responsable RH','Directeur RH','Recruteur','Chargé de Formation',
+              'Responsable Paie','Chargé des Relations Sociales','Assistant RH',
+              // Sécurité
+              'Agent de Sécurité','Chef Sécurité','Vigile','Rondier','Responsable Sûreté',
+              'Agent de Gardiennage','Superviseur Sécurité',
+              // Logistique & Transport
+              'Responsable Logistique','Gestionnaire de Stock','Magasinier','Chauffeur',
+              'Livreur','Opérateur Logistique','Responsable Entrepôt','Agent Douanier',
+              // Production & Maintenance
+              'Technicien de Maintenance','Ingénieur de Production','Opérateur de Production',
+              'Responsable Qualité','Contrôleur Qualité','Technicien Qualité',
+              'Chef d\'Atelier','Technicien Électricien','Technicien Mécanicien',
+              // Marketing & Communication
+              'Chargé Marketing','Responsable Marketing','Community Manager','Designer Graphique',
+              'Chargé de Communication','Attaché de Presse','Rédacteur','Photographe',
+              // Juridique
+              'Juriste','Conseiller Juridique','Responsable Juridique','Paralégal',
+              // Médical & Santé
+              'Médecin du Travail','Infirmier','Infirmière','Aide-soignant','Pharmacien',
+              'Assistant Médical',
+              // Restauration
+              'Cuisinier','Chef Cuisinier','Serveur','Hôtesse','Responsable Cantine',
+              'Aide Cuisiner',
+              // Accueil & Administratif
+              'Réceptionniste','Hôtesse d\'Accueil','Standardiste','Secrétaire',
+              'Assistant Administratif','Assistant de Direction','Archiviste','Agent Administratif',
+              // Achats
+              'Acheteur','Responsable Achats','Approvisionneur','Gestionnaire des Contrats',
+              // Formation
+              'Formateur','Responsable Formation','Coordinateur Pédagogique',
+              // Autres
+              'Stagiaire','Apprenti','Consultant Externe','Prestataire',
+          ];
+          sort($postes);
+
+          $photo_path = "";
+          if (isset($_FILES['photo']) && $_FILES['photo']['error'] === UPLOAD_ERR_OK && $_FILES['photo']['size'] > 0) {
+              $ext = strtolower(pathinfo($_FILES['photo']['name'], PATHINFO_EXTENSION));
+              if (in_array($ext, ['jpg','jpeg','png','gif','webp'])) {
+                  $photo_name = uniqid('emp_') . '.' . $ext;
+                  if (move_uploaded_file($_FILES['photo']['tmp_name'], $photo_dir . $photo_name)) {
+                      $photo_path = '/photos/' . $photo_name;
+                  }
+              }
+          }
+
+          if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'add') {
+              $uid = preg_replace('/[^a-z0-9]/', '', strtolower(substr($_POST['prenom'],0,1) . $_POST['nom']));
+              $uidNumber = rand(20000, 60000);
+              $gid = $departements[$_POST['departement']]['gid'] ?? 10001;
+              $new_emp = [
+                  'uid'         => $uid,
+                  'prenom'      => trim($_POST['prenom']),
+                  'nom'         => trim($_POST['nom']),
+                  'departement' => $_POST['departement'],
+                  'poste'       => $_POST['poste'],
+                  'email'       => trim($_POST['email']),
+                  'telephone'   => trim($_POST['telephone'] ?? ''),
+                  'photo'       => $photo_path,
+                  'statut'      => 'actif',
+                  'suspension'  => '',
+                  'created_at'  => date('Y-m-d H:i:s'),
+                  'uidNumber'   => $uidNumber,
+                  'gidNumber'   => $gid,
+              ];
+              $employees[] = $new_emp;
+              file_put_contents($data_file, json_encode($employees, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+              $ldapconn = ldap_connect_admin();
+              if ($ldapconn) {
+                  $dn = "uid=$uid,ou=people,dc=nodomain";
+                  $pass = $_POST['password'] ?? 'changeme123';
+                  $entry = [
+                      'objectClass'   => ['inetOrgPerson','posixAccount','shadowAccount'],
+                      'cn'            => $new_emp['prenom'] . ' ' . $new_emp['nom'],
+                      'sn'            => $new_emp['nom'],
+                      'givenName'     => $new_emp['prenom'],
+                      'uid'           => $uid,
+                      'uidNumber'     => (string)$uidNumber,
+                      'gidNumber'     => (string)$gid,
+                      'homeDirectory' => "/home/$uid",
+                      'loginShell'    => '/bin/bash',
+                      'userPassword'  => make_ssha($pass),
+                      'title'         => $new_emp['poste'],
+                  ];
+                  if ($new_emp['telephone']) $entry['telephoneNumber'] = $new_emp['telephone'];
+                  if ($new_emp['email']) $entry['mail'] = $new_emp['email'];
+                  $ok = @ldap_add($ldapconn, $dn, $entry);
+                  $message = $ok
+                      ? '<div class="toast-msg success"><svg viewBox="0 0 20 20" fill="currentColor" width="16"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg> Employé <strong>' . htmlspecialchars($new_emp['prenom'].' '.$new_emp['nom']) . '</strong> ajouté avec succès.</div>'
+                      : '<div class="toast-msg warning"><svg viewBox="0 0 20 20" fill="currentColor" width="16"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg> Ajouté en local mais erreur LDAP : ' . ldap_error($ldapconn) . '</div>';
+              } else {
+                  $message = '<div class="toast-msg warning">Ajouté en local. Connexion LDAP échouée.</div>';
+              }
+          }
+
+          if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'edit') {
+              $idx = (int)$_POST['idx'];
+              if (isset($employees[$idx])) {
+                  $old = $employees[$idx];
+                  if ($photo_path === '' && isset($old['photo'])) $photo_path = $old['photo'];
+                  $employees[$idx] = array_merge($old, [
+                      'prenom'      => trim($_POST['prenom']),
+                      'nom'         => trim($_POST['nom']),
+                      'departement' => $_POST['departement'],
+                      'poste'       => $_POST['poste'],
+                      'email'       => trim($_POST['email']),
+                      'telephone'   => trim($_POST['telephone'] ?? ''),
+                      'photo'       => $photo_path,
+                      'updated_at'  => date('Y-m-d H:i:s'),
+                  ]);
+                  file_put_contents($data_file, json_encode($employees, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+                  $ldapconn = ldap_connect_admin();
+                  if ($ldapconn) {
+                      $dn = "uid={$old['uid']},ou=people,dc=nodomain";
+                      $mod = [
+                          'cn'        => $employees[$idx]['prenom'] . ' ' . $employees[$idx]['nom'],
+                          'sn'        => $employees[$idx]['nom'],
+                          'givenName' => $employees[$idx]['prenom'],
+                          'mail'      => $employees[$idx]['email'],
+                          'title'     => $employees[$idx]['poste'],
+                      ];
+                      if ($employees[$idx]['telephone']) $mod['telephoneNumber'] = $employees[$idx]['telephone'];
+                      if (!empty($_POST['password'])) $mod['userPassword'] = make_ssha($_POST['password']);
+                      @ldap_modify($ldapconn, $dn, $mod);
+                  }
+                  $message = '<div class="toast-msg success">Employé mis à jour avec succès.</div>';
+              }
+          }
+
+          if (isset($_GET['suspend'])) {
+              $idx = (int)$_GET['suspend'];
+              $type = $_GET['type'] ?? 'temporaire';
+              if (isset($employees[$idx])) {
+                  $employees[$idx]['statut'] = 'suspendu';
+                  $employees[$idx]['suspension'] = $type;
+                  file_put_contents($data_file, json_encode($employees, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+                  $ldapconn = ldap_connect_admin();
+                  if ($ldapconn) @ldap_modify($ldapconn, "uid={$employees[$idx]['uid']},ou=people,dc=nodomain", ['loginShell' => '/sbin/nologin']);
+                  $message = '<div class="toast-msg warning">Employé suspendu (' . $type . ').</div>';
+              }
+          }
+
+          if (isset($_GET['reactivate'])) {
+              $idx = (int)$_GET['reactivate'];
+              if (isset($employees[$idx])) {
+                  $employees[$idx]['statut'] = 'actif';
+                  $employees[$idx]['suspension'] = '';
+                  file_put_contents($data_file, json_encode($employees, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+                  $ldapconn = ldap_connect_admin();
+                  if ($ldapconn) @ldap_modify($ldapconn, "uid={$employees[$idx]['uid']},ou=people,dc=nodomain", ['loginShell' => '/bin/bash']);
+                  $message = '<div class="toast-msg success">Employé réactivé avec succès.</div>';
+              }
+          }
+
+          if (isset($_GET['delete'])) {
+              $idx = (int)$_GET['delete'];
+              if (isset($employees[$idx])) {
+                  $uid_del = $employees[$idx]['uid'];
+                  if (!empty($employees[$idx]['photo'])) {
+                      $f = '/var/www/html' . $employees[$idx]['photo'];
+                      if (file_exists($f)) unlink($f);
+                  }
+                  array_splice($employees, $idx, 1);
+                  file_put_contents($data_file, json_encode($employees, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+                  $ldapconn = ldap_connect_admin();
+                  if ($ldapconn) @ldap_delete($ldapconn, "uid=$uid_del,ou=people,dc=nodomain");
+                  header('Location: employes.php?deleted=1'); exit;
+              }
+          }
+
+          $total     = count($employees);
+          $actifs    = count(array_filter($employees, fn($e) => ($e['statut'] ?? 'actif') === 'actif'));
+          $suspendus = $total - $actifs;
+          $depts_count = [];
+          foreach ($employees as $e) { $d = $e['departement'] ?? 'autre'; $depts_count[$d] = ($depts_count[$d] ?? 0) + 1; }
+          arsort($depts_count);
+          ?>
+          <!DOCTYPE html>
+          <html lang="fr">
+          <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1">
+          <title>SEIMP — Gestion des Employés</title>
+          <link rel="preconnect" href="https://fonts.googleapis.com">
+          <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Bricolage+Grotesque:opsz,wght@12..96,400;500;600;700;800&display=swap" rel="stylesheet">
+          <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
+          <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+          <style>
+          :root {
+            --bg: #f0f6ff;
+            --bg2: #ffffff;
+            --surface: #ffffff;
+            --surface2: #f5f9ff;
+            --surface3: #e8f1fd;
+            --border: #d0e2f7;
+            --border2: #b0cef0;
+            --accent: #1a73e8;
+            --accent2: #1557b0;
+            --accent-glow: rgba(26,115,232,0.12);
+            --accent-light: rgba(26,115,232,0.07);
+            --text: #0f2444;
+            --text2: #4a6080;
+            --text3: #7a94b0;
+            --success: #137a3a;
+            --success-bg: #eaf7ee;
+            --success-border: #a8ddb8;
+            --warning: #a05c00;
+            --warning-bg: #fff8e6;
+            --warning-border: #f5d48a;
+            --danger: #c0392b;
+            --danger-bg: #fdf0ee;
+            --danger-border: #f0b0aa;
+            --purple: #6b4fc8;
+            --purple-bg: #f0ecfa;
+            --radius: 12px;
+            --radius-sm: 8px;
+            --radius-xs: 6px;
+            --shadow: 0 1px 4px rgba(26,115,232,0.06), 0 4px 16px rgba(26,115,232,0.08);
+            --shadow-lg: 0 8px 32px rgba(26,115,232,0.13);
+          }
+          * { box-sizing: border-box; margin: 0; padding: 0; }
+          html { scroll-behavior: smooth; }
+          body {
+            font-family: 'Space Grotesk', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            font-size: 14px;
+            line-height: 1.5;
+          }
+
+          /* ─── SCROLLBAR ─── */
+          ::-webkit-scrollbar { width: 6px; height: 6px; }
+          ::-webkit-scrollbar-track { background: var(--bg); }
+          ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+          ::-webkit-scrollbar-thumb:hover { background: var(--text3); }
+
+          /* ─── SIDEBAR ─── */
+          .sidebar {
+            position: fixed; left: 0; top: 0; bottom: 0; width: 240px;
+            background: linear-gradient(180deg, #1a56c8 0%, #1244a8 60%, #0e3a8c 100%);
+            border-right: none;
+            display: flex; flex-direction: column; z-index: 100;
+            box-shadow: 4px 0 20px rgba(26,84,200,0.18);
+          }
+          .sidebar-logo {
+            padding: 20px 20px 18px;
+            border-bottom: 1px solid rgba(255,255,255,0.12);
+          }
+          .logo-mark {
+            display: flex; align-items: center; gap: 10px; margin-bottom: 4px;
+          }
+          .logo-icon {
+            width: 32px; height: 32px; border-radius: 8px;
+            background: rgba(255,255,255,0.18);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 14px; font-weight: 700; color: white;
+            box-shadow: 0 0 0 1px rgba(255,255,255,0.25), 0 4px 12px rgba(0,0,0,0.15);
+          }
+          .logo-text {
+            font-family: 'Bricolage Grotesque', sans-serif;
+            font-size: 18px; font-weight: 700; color: #ffffff; letter-spacing: -0.3px;
+          }
+          .logo-sub { font-size: 10px; color: rgba(255,255,255,0.45); text-transform: uppercase; letter-spacing: 1.5px; margin-left: 42px; }
+          .sidebar-section-label {
+            font-size: 10px; color: rgba(255,255,255,0.35); text-transform: uppercase; letter-spacing: 1.5px;
+            padding: 14px 16px 6px; font-weight: 600;
+          }
+          .sidebar-nav { flex: 1; padding: 8px; overflow-y: auto; }
+          .nav-item {
+            display: flex; align-items: center; gap: 10px;
+            padding: 9px 12px; border-radius: var(--radius-sm);
+            cursor: pointer; color: rgba(255,255,255,0.6);
+            font-size: 13.5px; font-weight: 500;
+            transition: all 0.15s; margin-bottom: 1px;
+            position: relative;
+          }
+          .nav-item:hover { color: #fff; background: rgba(255,255,255,0.1); }
+          .nav-item.active {
+            color: #fff; background: rgba(255,255,255,0.18);
+            border: 1px solid rgba(255,255,255,0.2);
+          }
+          .nav-item.active::before {
+            content: ''; position: absolute; left: 0; top: 50%; transform: translateY(-50%);
+            width: 3px; height: 18px; background: #fff; border-radius: 0 2px 2px 0;
+          }
+          .nav-item i { width: 16px; text-align: center; font-size: 13px; }
+          .nav-badge {
+            margin-left: auto; background: rgba(255,255,255,0.2); color: white;
+            font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 10px;
+          }
+          .sidebar-footer {
+            padding: 12px 16px; border-top: 1px solid rgba(255,255,255,0.12);
+            display: flex; align-items: center; gap: 10px;
+          }
+          .footer-avatar {
+            width: 28px; height: 28px; border-radius: 50%;
+            background: rgba(255,255,255,0.25);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 11px; font-weight: 700; color: white; flex-shrink: 0;
+          }
+          .footer-info { flex: 1; min-width: 0; }
+          .footer-name { font-size: 12px; font-weight: 600; color: rgba(255,255,255,0.9); }
+          .footer-role { font-size: 10px; color: rgba(255,255,255,0.4); }
+          .footer-dot { width: 6px; height: 6px; background: #4ade80; border-radius: 50%; flex-shrink: 0; }
+
+          /* ─── MAIN ─── */
+          .main { margin-left: 240px; min-height: 100vh; }
+          .topbar {
+            background: rgba(255,255,255,0.92); backdrop-filter: blur(12px);
+            border-bottom: 1px solid var(--border);
+            padding: 12px 28px;
+            display: flex; align-items: center; justify-content: space-between;
+            position: sticky; top: 0; z-index: 50;
+          }
+          .topbar-left { display: flex; align-items: center; gap: 12px; }
+          .topbar-title {
+            font-family: 'Bricolage Grotesque', sans-serif;
+            font-size: 16px; font-weight: 700; color: var(--text);
+          }
+          .breadcrumb { font-size: 12px; color: var(--text3); display: flex; align-items: center; gap: 6px; }
+          .breadcrumb i { font-size: 10px; }
+          .topbar-actions { display: flex; align-items: center; gap: 8px; }
+          .topbar-time { font-size: 11px; color: var(--text3); padding: 4px 10px; background: var(--surface2); border-radius: 6px; border: 1px solid var(--border); }
+          .content { padding: 24px 28px; }
+
+          /* ─── STATS GRID ─── */
+          .stats-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 14px; margin-bottom: 24px; }
+          .stat-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 18px;
+            box-shadow: var(--shadow);
+            transition: all 0.2s;
+            position: relative; overflow: hidden;
+          }
+          .stat-card::after {
+            content: ''; position: absolute; inset: 0;
+            background: var(--card-glow, transparent);
+            pointer-events: none; border-radius: var(--radius);
+          }
+          .stat-card:hover { border-color: var(--border2); transform: translateY(-2px); box-shadow: var(--shadow-lg); }
+          .stat-card.blue { --card-glow: linear-gradient(135deg, rgba(26,115,232,0.06) 0%, transparent 60%); border-color: rgba(26,115,232,0.2); }
+          .stat-card.green { --card-glow: linear-gradient(135deg, rgba(19,122,58,0.06) 0%, transparent 60%); border-color: rgba(19,122,58,0.2); }
+          .stat-card.orange { --card-glow: linear-gradient(135deg, rgba(160,92,0,0.06) 0%, transparent 60%); border-color: rgba(160,92,0,0.18); }
+          .stat-card.purple { --card-glow: linear-gradient(135deg, rgba(107,79,200,0.06) 0%, transparent 60%); border-color: rgba(107,79,200,0.2); }
+          .stat-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+          .stat-icon-wrap {
+            width: 38px; height: 38px; border-radius: 10px;
+            display: flex; align-items: center; justify-content: center; font-size: 17px;
+          }
+          .stat-icon-wrap.blue { background: rgba(26,115,232,0.1); }
+          .stat-icon-wrap.green { background: rgba(19,122,58,0.1); }
+          .stat-icon-wrap.orange { background: rgba(160,92,0,0.1); }
+          .stat-icon-wrap.purple { background: rgba(107,79,200,0.1); }
+          .stat-trend { font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 4px; }
+          .stat-trend.up { background: var(--success-bg); color: var(--success); }
+          .stat-trend.warn { background: var(--warning-bg); color: var(--warning); }
+          .stat-value {
+            font-family: 'Bricolage Grotesque', sans-serif;
+            font-size: 32px; font-weight: 700; line-height: 1;
+            margin-bottom: 4px;
+          }
+          .stat-value.blue { color: var(--accent); }
+          .stat-value.green { color: var(--success); }
+          .stat-value.orange { color: var(--warning); }
+          .stat-value.purple { color: var(--purple); }
+          .stat-label { font-size: 11px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.8px; font-weight: 500; }
+          .stat-sub { font-size: 11px; color: var(--text2); margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border); }
+
+          /* ─── PANELS ─── */
+          .panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; }
+          .panel-header {
+            padding: 14px 20px; border-bottom: 1px solid var(--border);
+            display: flex; align-items: center; justify-content: space-between;
+            background: var(--surface2);
+          }
+          .panel-title { font-family: 'Bricolage Grotesque', sans-serif; font-size: 14px; font-weight: 700; color: var(--text); display: flex; align-items: center; gap: 8px; }
+          .panel-title i { color: var(--accent); font-size: 13px; }
+          .panel-body { padding: 20px; }
+
+          /* ─── DEPT BARS ─── */
+          .dept-row { margin-bottom: 16px; }
+          .dept-row:last-child { margin-bottom: 0; }
+          .dept-row-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 7px; }
+          .dept-row-left { display: flex; align-items: center; gap: 8px; }
+          .dept-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+          .dept-name { font-size: 13px; font-weight: 500; color: var(--text); }
+          .dept-right { display: flex; align-items: center; gap: 8px; }
+          .dept-count { font-size: 12px; font-weight: 600; color: var(--text2); }
+          .dept-pct { font-size: 10px; color: var(--text3); }
+          .progress-bar { height: 5px; background: var(--surface3); border-radius: 3px; overflow: hidden; }
+          .progress-fill { height: 100%; border-radius: 3px; transition: width 1s cubic-bezier(.4,0,.2,1); }
+
+          /* ─── FORM ─── */
+          .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+          .form-group { display: flex; flex-direction: column; gap: 5px; }
+          .form-group.full { grid-column: 1 / -1; }
+          label { font-size: 11px; font-weight: 600; color: var(--text2); text-transform: uppercase; letter-spacing: 0.8px; }
+          input, select, textarea {
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            color: var(--text); border-radius: var(--radius-sm);
+            padding: 9px 12px; font-size: 13px; font-family: 'Space Grotesk', sans-serif;
+            transition: border-color 0.15s, box-shadow 0.15s; outline: none; width: 100%;
+          }
+          input::placeholder { color: var(--text3); }
+          input:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(56,139,253,0.12); background: var(--surface3); }
+          select option { background: var(--surface2); color: var(--text); }
+
+          /* ─── PHOTO UPLOAD ─── */
+          .photo-upload {
+            border: 1.5px dashed var(--border2); border-radius: var(--radius);
+            padding: 20px; text-align: center; cursor: pointer;
+            transition: all 0.2s; position: relative; background: var(--surface2);
+          }
+          .photo-upload:hover { border-color: var(--accent); background: var(--accent-light); }
+          .photo-upload input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+          .upload-icon { font-size: 22px; color: var(--accent); margin-bottom: 8px; display: block; }
+          .upload-text { font-size: 12px; color: var(--text2); }
+          .upload-hint { font-size: 11px; color: var(--text3); margin-top: 3px; }
+          .photo-preview-img { width: 70px; height: 70px; border-radius: 50%; object-fit: cover; border: 2px solid var(--accent); margin-bottom: 8px; box-shadow: 0 0 0 3px rgba(26,115,232,0.15); }
+
+          /* ─── BUTTONS ─── */
+          .btn {
+            display: inline-flex; align-items: center; gap: 7px;
+            padding: 8px 14px; border-radius: var(--radius-sm);
+            font-size: 12.5px; font-weight: 600; cursor: pointer;
+            border: 1px solid transparent; transition: all 0.15s; text-decoration: none;
+            font-family: 'Space Grotesk', sans-serif; white-space: nowrap;
+          }
+          .btn-primary { background: var(--accent2); color: white; border-color: rgba(26,115,232,0.3); }
+          .btn-primary:hover { background: var(--accent); box-shadow: 0 0 0 3px rgba(56,139,253,0.2); }
+          .btn-danger { background: var(--danger-bg); color: var(--danger); border-color: var(--danger-border); }
+          .btn-danger:hover { background: var(--danger); color: white; }
+          .btn-warning { background: var(--warning-bg); color: var(--warning); border-color: var(--warning-border); }
+          .btn-warning:hover { background: var(--warning); color: white; }
+          .btn-success { background: var(--success-bg); color: var(--success); border-color: var(--success-border); }
+          .btn-success:hover { background: var(--success); color: white; }
+          .btn-ghost { background: transparent; color: var(--text2); border-color: var(--border); }
+          .btn-ghost:hover { color: var(--text); border-color: var(--border2); background: var(--surface3); }
+          .btn-sm { padding: 5px 10px; font-size: 11.5px; }
+          .btn-full { width: 100%; justify-content: center; padding: 11px; font-size: 13.5px; }
+
+          /* ─── TABLE ─── */
+          .emp-table { width: 100%; border-collapse: collapse; }
+          .emp-table th {
+            text-align: left; padding: 9px 14px;
+            font-size: 10.5px; color: var(--text3); text-transform: uppercase; letter-spacing: 1px;
+            border-bottom: 1px solid var(--border); font-weight: 600; background: var(--surface2);
+          }
+          .emp-table td { padding: 12px 14px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+          .emp-table tr:last-child td { border-bottom: none; }
+          .emp-table tbody tr { transition: background 0.12s; }
+          .emp-table tbody tr:hover td { background: var(--surface3); }
+
+          .emp-avatar { width: 36px; height: 36px; border-radius: 50%; object-fit: cover; border: 1.5px solid var(--border2); }
+          .emp-avatar-placeholder {
+            width: 36px; height: 36px; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-weight: 700; font-size: 12px; flex-shrink: 0;
+            border: 1.5px solid var(--border2);
+          }
+
+          /* ─── BADGES ─── */
+          .badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 20px; font-size: 10.5px; font-weight: 600; }
+          .badge-active { background: var(--success-bg); color: var(--success); border: 1px solid var(--success-border); }
+          .badge-suspended-temp { background: var(--warning-bg); color: var(--warning); border: 1px solid var(--warning-border); }
+          .badge-suspended-def { background: var(--danger-bg); color: var(--danger); border: 1px solid var(--danger-border); }
+          .dept-badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 6px; font-size: 11px; background: var(--surface3); color: var(--text2); border: 1px solid var(--border); }
+
+          /* ─── TOAST ─── */
+          .toast-msg { padding: 11px 16px; border-radius: var(--radius-sm); margin-bottom: 18px; font-size: 13px; font-weight: 500; display: flex; align-items: center; gap: 10px; animation: slideIn 0.25s ease; }
+          .toast-msg.success { background: var(--success-bg); border: 1px solid var(--success-border); color: var(--success); }
+          .toast-msg.warning { background: var(--warning-bg); border: 1px solid var(--warning-border); color: var(--warning); }
+          @keyframes slideIn { from { opacity:0; transform:translateY(-6px); } to { opacity:1; transform:translateY(0); } }
+
+          /* ─── MODAL ─── */
+          .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(15,36,68,0.35); backdrop-filter: blur(4px); z-index: 1000; align-items: center; justify-content: center; }
+          .modal-overlay.open { display: flex; }
+          .modal { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); width: 600px; max-width: 95vw; max-height: 90vh; overflow-y: auto; box-shadow: 0 24px 64px rgba(0,0,0,0.5); animation: modalIn 0.2s ease; }
+          @keyframes modalIn { from { opacity:0; transform:scale(0.97) translateY(8px); } to { opacity:1; transform:scale(1) translateY(0); } }
+          .modal-header { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; background: var(--surface2); }
+          .modal-title { font-family: 'Bricolage Grotesque', sans-serif; font-size: 15px; font-weight: 700; color: var(--text); display: flex; align-items: center; gap: 8px; }
+          .modal-close { background: none; border: none; color: var(--text3); font-size: 16px; cursor: pointer; transition: color 0.15s; padding: 4px; }
+          .modal-close:hover { color: var(--danger); }
+          .modal-body { padding: 20px; }
+          .modal-footer { padding: 12px 20px; border-top: 1px solid var(--border); display: flex; gap: 8px; justify-content: flex-end; background: var(--surface2); }
+
+          /* ─── SEARCH ─── */
+          .search-wrap { position: relative; margin-bottom: 14px; }
+          .search-wrap i { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text3); font-size: 12px; }
+          .search-wrap input { padding-left: 34px; }
+
+          /* ─── BADGE CARD ─── */
+          .badge-card {
+            background: linear-gradient(160deg, #1244a8 0%, #1a56c8 40%, #0e3a8c 100%);
+            border-radius: 20px; padding: 28px 24px 24px; color: white;
+            width: 340px; margin: 0 auto; position: relative; overflow: hidden;
+            box-shadow: 0 20px 60px rgba(26,84,200,0.3), 0 0 0 1px rgba(255,255,255,0.08);
+            font-family: 'Space Grotesk', sans-serif;
+          }
+          .badge-card::before {
+            content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+            background: linear-gradient(90deg, #60a5fa, #93c5fd, #60a5fa);
+          }
+          .badge-card::after {
+            content: ''; position: absolute; top: -60px; right: -60px;
+            width: 200px; height: 200px; border-radius: 50%;
+            background: radial-gradient(circle, rgba(147,197,253,0.1) 0%, transparent 70%);
+            pointer-events: none;
+          }
+          .badge-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 22px; }
+          .badge-company-name { font-size: 10px; letter-spacing: 3px; text-transform: uppercase; opacity: 0.4; font-weight: 600; }
+          .badge-type-chip { font-size: 9px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; background: rgba(26,115,232,0.15); border: 1px solid rgba(26,115,232,0.3); color: #1a73e8; padding: 3px 8px; border-radius: 4px; }
+          .badge-center { display: flex; align-items: center; gap: 16px; margin-bottom: 20px; }
+          .badge-photo-wrap { flex-shrink: 0; }
+          .badge-photo {
+            width: 76px; height: 76px; border-radius: 16px; object-fit: cover;
+            border: 2px solid rgba(56,139,253,0.4);
+            box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+          }
+          .badge-photo-placeholder {
+            width: 76px; height: 76px; border-radius: 16px;
+            background: linear-gradient(135deg, rgba(56,139,253,0.2), rgba(188,140,255,0.15));
+            border: 2px solid rgba(26,115,232,0.3);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 26px; font-weight: 700; color: #1a73e8;
+          }
+          .badge-info { flex: 1; min-width: 0; }
+          .badge-name { font-family: 'Bricolage Grotesque', sans-serif; font-size: 18px; font-weight: 700; line-height: 1.1; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+          .badge-title { font-size: 12px; color: rgba(255,255,255,0.65); margin-bottom: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+          .badge-dept { font-size: 10px; color: rgba(255,255,255,0.35); font-weight: 500; }
+          .badge-divider { height: 1px; background: linear-gradient(90deg, rgba(26,115,232,0.3), transparent); margin: 14px 0; }
+          .badge-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 16px; }
+          .badge-field { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.06); border-radius: 8px; padding: 7px 10px; }
+          .badge-field-label { font-size: 8px; color: rgba(255,255,255,0.3); text-transform: uppercase; letter-spacing: 1.2px; margin-bottom: 3px; font-weight: 600; }
+          .badge-field-value { font-size: 11px; color: rgba(255,255,255,0.8); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+          .badge-field.full { grid-column: 1/-1; }
+          .badge-bottom { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+          .badge-qr-wrap { flex-shrink: 0; }
+          .badge-qr-inner { background: white; border-radius: 8px; padding: 6px; display: flex; align-items: center; justify-content: center; }
+          .badge-meta { flex: 1; }
+          .badge-uid { font-size: 13px; font-weight: 700; color: #93c5fd; margin-bottom: 4px; letter-spacing: 0.5px; }
+          .badge-date { font-size: 9px; color: rgba(255,255,255,0.25); }
+          .badge-disclaimer { text-align: right; font-size: 8px; color: rgba(255,255,255,0.2); margin-top: 12px; letter-spacing: 0.5px; }
+
+          /* ─── FILTERS ─── */
+          .filter-row { display: flex; gap: 6px; margin-bottom: 14px; flex-wrap: wrap; }
+          .filter-btn { padding: 4px 11px; border-radius: 6px; font-size: 11.5px; font-weight: 600; cursor: pointer; border: 1px solid var(--border); background: var(--surface2); color: var(--text3); transition: all 0.15s; }
+          .filter-btn.active, .filter-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-light); }
+
+          .section { display: none; }
+          .section.active { display: block; }
+          .actions-row { display: flex; gap: 5px; }
+
+          /* ─── CONFIRM ─── */
+          .confirm-dialog { position: fixed; inset: 0; background: rgba(15,36,68,0.35); backdrop-filter: blur(4px); display: none; align-items: center; justify-content: center; z-index: 2000; }
+          .confirm-dialog.open { display: flex; }
+          .confirm-box { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 28px; width: 360px; text-align: center; box-shadow: var(--shadow-lg); animation: modalIn 0.2s ease; }
+          .confirm-icon { font-size: 36px; margin-bottom: 12px; }
+          .confirm-box h3 { font-family: 'Bricolage Grotesque', sans-serif; font-size: 16px; font-weight: 700; margin-bottom: 8px; color: var(--text); }
+          .confirm-box p { color: var(--text3); font-size: 13px; margin-bottom: 22px; line-height: 1.6; }
+          .confirm-btns { display: flex; gap: 10px; justify-content: center; }
+
+          /* ─── EMPLOYEE LIST BADGE SELECTOR ─── */
+          .emp-pick-item {
+            display: flex; align-items: center; gap: 12px; padding: 10px 12px;
+            border-radius: 10px; cursor: pointer; border: 1px solid var(--border);
+            transition: all 0.15s; background: var(--surface2);
+          }
+          .emp-pick-item:hover { border-color: var(--accent); background: var(--accent-light); }
+          .emp-pick-item.selected { border-color: var(--accent); background: var(--accent-light); }
+          </style>
+          </head>
+          <body>
+
+          <aside class="sidebar">
+            <div class="sidebar-logo">
+              <div class="logo-mark">
+                <div class="logo-icon">S</div>
+                <div class="logo-text">SEIMP</div>
+              </div>
+              <div class="logo-sub">Système RH</div>
+            </div>
+            <nav class="sidebar-nav">
+              <div class="sidebar-section-label">Navigation</div>
+              <div class="nav-item active" onclick="showSection('dashboard',this)">
+                <i class="fas fa-chart-line"></i> Tableau de bord
+              </div>
+              <div class="nav-item" onclick="showSection('employees',this)">
+                <i class="fas fa-users"></i> Employés
+                <span class="nav-badge"><?php echo $total; ?></span>
+              </div>
+              <div class="nav-item" onclick="showSection('add',this)">
+                <i class="fas fa-user-plus"></i> Nouvel employé
+              </div>
+              <div class="nav-item" onclick="showSection('badges',this)">
+                <i class="fas fa-id-card"></i> Badges
+              </div>
+            </nav>
+            <div class="sidebar-footer">
+              <div class="footer-avatar"><?php echo strtoupper(substr($_SERVER['PHP_AUTH_USER'],0,1)); ?></div>
+              <div class="footer-info">
+                <div class="footer-name"><?php echo htmlspecialchars($_SERVER['PHP_AUTH_USER']); ?></div>
+                <div class="footer-role">Administrateur RH</div>
+              </div>
+              <div class="footer-dot"></div>
+            </div>
+          </aside>
+
+          <main class="main">
+            <div class="topbar">
+              <div class="topbar-left">
+                <div class="topbar-title" id="page-title">Tableau de bord</div>
+              </div>
+              <div class="topbar-actions">
+                <div class="topbar-time" id="clock"></div>
+              </div>
+            </div>
+            <div class="content">
+              <?php if ($message) echo $message; ?>
+              <?php if (isset($_GET['deleted'])) echo '<div class="toast-msg success"><i class="fas fa-check-circle"></i> Employé supprimé avec succès.</div>'; ?>
+
+              <!-- ══ DASHBOARD ══ -->
+              <div id="section-dashboard" class="section active">
+                <div class="stats-grid">
+                  <div class="stat-card blue">
+                    <div class="stat-header">
+                      <div class="stat-icon-wrap blue"><i class="fas fa-users" style="color:#1a73e8"></i></div>
+                      <span class="stat-trend up"><i class="fas fa-arrow-up"></i> Total</span>
+                    </div>
+                    <div class="stat-value blue"><?php echo $total; ?></div>
+                    <div class="stat-label">Employés</div>
+                    <div class="stat-sub"><?php echo count($depts_count); ?> département<?php echo count($depts_count)>1?'s':''; ?> actif<?php echo count($depts_count)>1?'s':''; ?></div>
+                  </div>
+                  <div class="stat-card green">
+                    <div class="stat-header">
+                      <div class="stat-icon-wrap green"><i class="fas fa-circle-check" style="color:#3fb950"></i></div>
+                      <span class="stat-trend up"><?php echo $total>0?round($actifs/$total*100):0; ?>%</span>
+                    </div>
+                    <div class="stat-value green"><?php echo $actifs; ?></div>
+                    <div class="stat-label">Actifs</div>
+                    <div class="stat-sub">En poste actuellement</div>
+                  </div>
+                  <div class="stat-card orange">
+                    <div class="stat-header">
+                      <div class="stat-icon-wrap orange"><i class="fas fa-pause-circle" style="color:#d29922"></i></div>
+                      <?php if ($suspendus > 0): ?><span class="stat-trend warn"><?php echo $suspendus; ?> cas</span><?php endif; ?>
+                    </div>
+                    <div class="stat-value orange"><?php echo $suspendus; ?></div>
+                    <div class="stat-label">Suspendus</div>
+                    <div class="stat-sub">Accès désactivés</div>
+                  </div>
+                  <div class="stat-card purple">
+                    <div class="stat-header">
+                      <div class="stat-icon-wrap purple"><i class="fas fa-building" style="color:#bc8cff"></i></div>
+                    </div>
+                    <div class="stat-value purple"><?php echo count($depts_count); ?></div>
+                    <div class="stat-label">Départements</div>
+                    <div class="stat-sub">Unités organisationnelles</div>
+                  </div>
+                </div>
+
+                <div class="panel">
+                  <div class="panel-header">
+                    <span class="panel-title"><i class="fas fa-chart-bar"></i> Répartition par département</span>
+                    <span style="font-size:11px;color:var(--text3);"><?php echo $total; ?> employé<?php echo $total>1?'s':''; ?> au total</span>
+                  </div>
+                  <div class="panel-body">
+                    <?php
+                    $palette = ['#1a73e8','#16a34a','#d29922','#bc8cff','#f85149','#58a6ff','#79c0ff','#56d364','#e3b341','#ff7b72'];
+                    $ci = 0;
+                    foreach ($depts_count as $dept => $count):
+                      $pct = $total > 0 ? round($count/$total*100) : 0;
+                      $info = $departements[$dept] ?? ['label'=>$dept,'icon'=>'🏢','color'=>'#1a73e8'];
+                      $col = $info['color'] ?? $palette[$ci % count($palette)];
+                      $ci++;
+                    ?>
+                    <div class="dept-row">
+                      <div class="dept-row-header">
+                        <div class="dept-row-left">
+                          <div class="dept-dot" style="background:<?php echo $col; ?>;box-shadow:0 0 6px <?php echo $col; ?>40;"></div>
+                          <span class="dept-name"><?php echo $info['icon'].' '.htmlspecialchars($info['label']); ?></span>
+                        </div>
+                        <div class="dept-right">
+                          <span class="dept-count"><?php echo $count; ?></span>
+                          <span class="dept-pct"><?php echo $pct; ?>%</span>
+                        </div>
+                      </div>
+                      <div class="progress-bar">
+                        <div class="progress-fill" style="width:<?php echo $pct; ?>%;background:<?php echo $col; ?>;box-shadow:0 0 8px <?php echo $col; ?>60;"></div>
+                      </div>
+                    </div>
+                    <?php endforeach; ?>
+                    <?php if (empty($depts_count)): ?>
+                    <div style="text-align:center;padding:32px 0;color:var(--text3);">
+                      <i class="fas fa-chart-bar" style="font-size:32px;margin-bottom:12px;display:block;opacity:0.3;"></i>
+                      Aucun employé enregistré.
+                    </div>
+                    <?php endif; ?>
+                  </div>
+                </div>
+              </div>
+
+              <!-- ══ EMPLOYEES ══ -->
+              <div id="section-employees" class="section">
+                <div class="panel">
+                  <div class="panel-header">
+                    <span class="panel-title"><i class="fas fa-users"></i> Employés <span style="color:var(--text3);font-weight:400;font-size:12px;">(<?php echo $total; ?>)</span></span>
+                    <button class="btn btn-primary btn-sm" onclick="showSection('add', document.querySelectorAll('.nav-item')[2])"><i class="fas fa-plus"></i> Ajouter</button>
+                  </div>
+                  <div class="panel-body">
+                    <div class="search-wrap">
+                      <i class="fas fa-search"></i>
+                      <input type="text" id="search-input" placeholder="Rechercher par nom, UID, poste..." oninput="filterTable()">
+                    </div>
+                    <div class="filter-row">
+                      <div class="filter-btn active" onclick="filterStatus('all',this)">Tous (<?php echo $total; ?>)</div>
+                      <div class="filter-btn" onclick="filterStatus('actif',this)">✅ Actifs (<?php echo $actifs; ?>)</div>
+                      <div class="filter-btn" onclick="filterStatus('suspendu',this)">⏸️ Suspendus (<?php echo $suspendus; ?>)</div>
+                      <?php foreach($departements as $k=>$d): if(!isset($depts_count[$k])) continue; ?><div class="filter-btn" onclick="filterDept('<?php echo $k; ?>',this)"><?php echo $d['icon'].' '.$d['label']; ?></div><?php endforeach; ?>
+                    </div>
+                    <div style="overflow-x:auto;">
+                    <table class="emp-table" id="emp-table">
+                      <thead><tr><th>Employé</th><th>Poste</th><th>Département</th><th>Contact</th><th>Statut</th><th>Actions</th></tr></thead>
+                      <tbody>
+                      <?php foreach ($employees as $idx => $emp):
+                        $statut = $emp['statut'] ?? 'actif';
+                        $suspension = $emp['suspension'] ?? '';
+                        $initials = strtoupper(substr($emp['prenom']??'?',0,1).substr($emp['nom']??'?',0,1));
+                        $dept_info = $departements[$emp['departement']??''] ?? ['label'=>$emp['departement']??'','icon'=>'🏢','color'=>'#1a73e8'];
+                        $col = $dept_info['color'] ?? '#1a73e8';
+                        $bg = 'rgba('.implode(',',array_map('hexdec',[substr($col,1,2),substr($col,3,2),substr($col,5,2)])).', 0.12)';
+                      ?>
+                      <tr data-status="<?php echo $statut; ?>" data-dept="<?php echo htmlspecialchars($emp['departement']??''); ?>"
+                          data-search="<?php echo strtolower(htmlspecialchars($emp['prenom'].' '.$emp['nom'].' '.($emp['uid']??'').' '.($emp['poste']??''))); ?>">
+                        <td>
+                          <div style="display:flex;align-items:center;gap:10px;">
+                            <?php if (!empty($emp['photo']) && file_exists('/var/www/html'.$emp['photo'])): ?>
+                            <img src="<?php echo htmlspecialchars($emp['photo']); ?>" class="emp-avatar">
+                            <?php else: ?>
+                            <div class="emp-avatar-placeholder" style="background:<?php echo $bg; ?>;color:<?php echo $col; ?>;"><?php echo $initials; ?></div>
+                            <?php endif; ?>
+                            <div>
+                              <div style="font-weight:600;font-size:13.5px;"><?php echo htmlspecialchars($emp['prenom'].' '.$emp['nom']); ?></div>
+                              <div style="font-size:11px;color:var(--text3);font-family:monospace;"><?php echo htmlspecialchars($emp['uid']??''); ?></div>
+                            </div>
+                          </div>
+                        </td>
+                        <td style="font-size:12.5px;color:var(--text2);"><?php echo htmlspecialchars($emp['poste']??''); ?></td>
+                        <td><span class="dept-badge"><?php echo $dept_info['icon'].' '.htmlspecialchars($dept_info['label']); ?></span></td>
+                        <td style="font-size:11.5px;color:var(--text3);">
+                          <?php if (!empty($emp['email'])): ?><div style="margin-bottom:2px;"><i class="fas fa-envelope" style="width:12px;margin-right:4px;color:var(--text3);font-size:10px;"></i><?php echo htmlspecialchars($emp['email']); ?></div><?php endif; ?>
+                          <?php if (!empty($emp['telephone'])): ?><div><i class="fas fa-phone" style="width:12px;margin-right:4px;color:var(--text3);font-size:10px;"></i><?php echo htmlspecialchars($emp['telephone']); ?></div><?php endif; ?>
+                        </td>
+                        <td>
+                          <?php if ($statut==='actif'): ?>
+                          <span class="badge badge-active"><i class="fas fa-circle" style="font-size:5px;"></i> Actif</span>
+                          <?php elseif ($suspension==='temporaire'): ?>
+                          <span class="badge badge-suspended-temp"><i class="fas fa-pause" style="font-size:8px;"></i> Temp.</span>
+                          <?php else: ?>
+                          <span class="badge badge-suspended-def"><i class="fas fa-ban" style="font-size:8px;"></i> Définitif</span>
+                          <?php endif; ?>
+                        </td>
+                        <td>
+                          <div class="actions-row">
+                            <button class="btn btn-ghost btn-sm" onclick="openEdit(<?php echo $idx; ?>)" title="Modifier"><i class="fas fa-pen"></i></button>
+                            <button class="btn btn-ghost btn-sm" onclick="generateBadge(<?php echo $idx; ?>)" title="Badge"><i class="fas fa-id-card"></i></button>
+                            <?php if ($statut==='actif'): ?>
+                            <button class="btn btn-warning btn-sm" onclick="openSuspend(<?php echo $idx; ?>)" title="Suspendre"><i class="fas fa-pause"></i></button>
+                            <?php else: ?>
+                            <a href="?reactivate=<?php echo $idx; ?>" class="btn btn-success btn-sm" title="Réactiver"><i class="fas fa-play"></i></a>
+                            <?php endif; ?>
+                            <button class="btn btn-danger btn-sm" onclick="confirmDelete(<?php echo $idx; ?>)" title="Supprimer"><i class="fas fa-trash"></i></button>
+                          </div>
+                        </td>
+                      </tr>
+                      <?php endforeach; ?>
+                      <?php if (empty($employees)): ?>
+                      <tr><td colspan="6" style="text-align:center;padding:48px;color:var(--text3);">
+                        <i class="fas fa-users" style="font-size:36px;margin-bottom:14px;display:block;opacity:0.2;"></i>
+                        Aucun employé. <a href="#" onclick="showSection('add',null)" style="color:var(--accent);">Ajouter le premier →</a>
+                      </td></tr>
+                      <?php endif; ?>
+                      </tbody>
+                    </table>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- ══ ADD ══ -->
+              <div id="section-add" class="section">
+                <div class="panel">
+                  <div class="panel-header">
+                    <span class="panel-title"><i class="fas fa-user-plus"></i> Nouvel Employé</span>
+                  </div>
+                  <div class="panel-body">
+                    <form method="POST" enctype="multipart/form-data">
+                      <input type="hidden" name="action" value="add">
+                      <div class="form-grid">
+                        <div class="form-group"><label>Prénom *</label><input type="text" name="prenom" required placeholder="ex: Mamadou"></div>
+                        <div class="form-group"><label>Nom *</label><input type="text" name="nom" required placeholder="ex: Niang"></div>
+                        <div class="form-group">
+                          <label>Département *</label>
+                          <select name="departement" required>
+                            <option value="">— Choisir un département —</option>
+                            <?php foreach($departements as $k=>$d): ?><option value="<?php echo $k; ?>"><?php echo $d['icon'].' '.$d['label']; ?></option><?php endforeach; ?>
+                          </select>
+                        </div>
+                        <div class="form-group">
+                          <label>Poste *</label>
+                          <select name="poste" required>
+                            <option value="">— Choisir un poste —</option>
+                            <?php foreach($postes as $p): ?><option value="<?php echo htmlspecialchars($p); ?>"><?php echo htmlspecialchars($p); ?></option><?php endforeach; ?>
+                          </select>
+                        </div>
+                        <div class="form-group"><label>Email</label><input type="email" name="email" placeholder="prenom.nom@seimp.sn"></div>
+                        <div class="form-group"><label>Téléphone</label><input type="text" name="telephone" placeholder="+221 77 000 00 00"></div>
+                        <div class="form-group"><label>Mot de passe LDAP *</label><input type="password" name="password" required placeholder="••••••••"></div>
+                        <div class="form-group">
+                          <label>Photo de profil</label>
+                          <div class="photo-upload" id="drop-zone">
+                            <input type="file" name="photo" accept="image/*" onchange="previewPhoto(this)">
+                            <div id="photo-preview-container">
+                              <i class="fas fa-cloud-upload-alt upload-icon"></i>
+                              <div class="upload-text">Cliquer ou glisser une photo</div>
+                              <div class="upload-hint">JPG, PNG, WEBP — max 5 Mo</div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <div style="margin-top:20px;border-top:1px solid var(--border);padding-top:18px;">
+                        <button type="submit" class="btn btn-primary btn-full"><i class="fas fa-user-plus"></i> Enregistrer l'employé</button>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+              </div>
+
+              <!-- ══ BADGES ══ -->
+              <div id="section-badges" class="section">
+                <div style="display:grid;grid-template-columns:1fr 1.1fr;gap:20px;">
+                  <div class="panel">
+                    <div class="panel-header"><span class="panel-title"><i class="fas fa-list"></i> Sélectionner un employé</span></div>
+                    <div class="panel-body" style="padding:12px;">
+                      <?php if (empty($employees)): ?>
+                      <p style="color:var(--text3);padding:16px;">Aucun employé disponible.</p>
+                      <?php else: ?>
+                      <div style="display:flex;flex-direction:column;gap:6px;max-height:500px;overflow-y:auto;padding:4px;">
+                        <?php foreach ($employees as $idx => $emp):
+                          $initials = strtoupper(substr($emp['prenom']??'?',0,1).substr($emp['nom']??'?',0,1));
+                          $dept_info2 = $departements[$emp['departement']??''] ?? ['label'=>'','icon'=>'','color'=>'#1a73e8'];
+                          $c2 = $dept_info2['color'] ?? '#1a73e8';
+                        ?>
+                        <div class="emp-pick-item" onclick="generateBadge(<?php echo $idx; ?>)" id="pick-<?php echo $idx; ?>">
+                          <?php if (!empty($emp['photo']) && file_exists('/var/www/html'.$emp['photo'])): ?>
+                          <img src="<?php echo htmlspecialchars($emp['photo']); ?>" style="width:36px;height:36px;border-radius:8px;object-fit:cover;border:1px solid var(--border2);flex-shrink:0;">
+                          <?php else: ?>
+                          <div style="width:36px;height:36px;border-radius:8px;background:rgba(<?php echo implode(',',array_map('hexdec',[substr($c2,1,2),substr($c2,3,2),substr($c2,5,2)])); ?>,0.15);color:<?php echo $c2; ?>;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex-shrink:0;"><?php echo $initials; ?></div>
+                          <?php endif; ?>
+                          <div style="flex:1;min-width:0;">
+                            <div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"><?php echo htmlspecialchars($emp['prenom'].' '.$emp['nom']); ?></div>
+                            <div style="font-size:11px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"><?php echo htmlspecialchars($emp['poste']??''); ?></div>
+                          </div>
+                          <i class="fas fa-chevron-right" style="color:var(--text3);font-size:10px;flex-shrink:0;"></i>
+                        </div>
+                        <?php endforeach; ?>
+                      </div>
+                      <?php endif; ?>
+                    </div>
+                  </div>
+                  <div class="panel">
+                    <div class="panel-header">
+                      <span class="panel-title"><i class="fas fa-id-card"></i> Aperçu du badge</span>
+                      <button class="btn btn-primary btn-sm" id="download-badge-btn" onclick="downloadBadge()" style="display:none;"><i class="fas fa-download"></i> Télécharger PNG</button>
+                    </div>
+                    <div class="panel-body" style="display:flex;align-items:center;justify-content:center;min-height:360px;">
+                      <div id="badge-preview-area" style="text-align:center;">
+                        <i class="fas fa-id-card" style="font-size:48px;color:var(--border2);margin-bottom:14px;display:block;"></i>
+                        <p style="color:var(--text3);font-size:13px;">← Sélectionnez un employé</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </main>
+
+          <!-- ══ MODAL EDIT ══ -->
+          <div class="modal-overlay" id="edit-modal">
+            <div class="modal">
+              <div class="modal-header">
+                <span class="modal-title"><i class="fas fa-pen" style="color:var(--accent);"></i> Modifier l'employé</span>
+                <button class="modal-close" onclick="closeModal('edit-modal')"><i class="fas fa-times"></i></button>
+              </div>
+              <div class="modal-body">
+                <form method="POST" enctype="multipart/form-data" id="edit-form">
+                  <input type="hidden" name="action" value="edit">
+                  <input type="hidden" name="idx" id="edit-idx">
+                  <div class="form-grid">
+                    <div class="form-group"><label>Prénom *</label><input type="text" name="prenom" id="edit-prenom" required></div>
+                    <div class="form-group"><label>Nom *</label><input type="text" name="nom" id="edit-nom" required></div>
+                    <div class="form-group">
+                      <label>Département</label>
+                      <select name="departement" id="edit-departement">
+                        <?php foreach($departements as $k=>$d): ?><option value="<?php echo $k; ?>"><?php echo $d['icon'].' '.$d['label']; ?></option><?php endforeach; ?>
+                      </select>
+                    </div>
+                    <div class="form-group">
+                      <label>Poste</label>
+                      <select name="poste" id="edit-poste">
+                        <?php foreach($postes as $p): ?><option value="<?php echo htmlspecialchars($p); ?>"><?php echo htmlspecialchars($p); ?></option><?php endforeach; ?>
+                      </select>
+                    </div>
+                    <div class="form-group"><label>Email</label><input type="email" name="email" id="edit-email"></div>
+                    <div class="form-group"><label>Téléphone</label><input type="text" name="telephone" id="edit-telephone"></div>
+                    <div class="form-group full"><label>Nouveau mot de passe (laisser vide pour conserver)</label><input type="password" name="password" placeholder="••••••••"></div>
+                    <div class="form-group full">
+                      <label>Nouvelle photo (optionnel)</label>
+                      <div class="photo-upload"><input type="file" name="photo" accept="image/*"><i class="fas fa-camera upload-icon" style="font-size:20px;"></i><div class="upload-text">Changer la photo</div></div>
+                    </div>
+                  </div>
+                </form>
+              </div>
+              <div class="modal-footer">
+                <button class="btn btn-ghost" onclick="closeModal('edit-modal')">Annuler</button>
+                <button class="btn btn-primary" onclick="document.getElementById('edit-form').submit()"><i class="fas fa-save"></i> Sauvegarder</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- ══ MODAL SUSPEND ══ -->
+          <div class="modal-overlay" id="suspend-modal">
+            <div class="modal" style="width:380px;">
+              <div class="modal-header">
+                <span class="modal-title"><i class="fas fa-pause-circle" style="color:var(--warning);"></i> Suspendre l'employé</span>
+                <button class="modal-close" onclick="closeModal('suspend-modal')"><i class="fas fa-times"></i></button>
+              </div>
+              <div class="modal-body">
+                <p style="color:var(--text2);margin-bottom:16px;font-size:13px;">Choisissez le type de suspension :</p>
+                <div style="display:flex;flex-direction:column;gap:8px;">
+                  <a id="suspend-temp-btn" href="#" class="btn btn-warning btn-full"><i class="fas fa-clock"></i> Suspension temporaire</a>
+                  <a id="suspend-def-btn" href="#" class="btn btn-danger btn-full"><i class="fas fa-ban"></i> Suspension définitive</a>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ══ CONFIRM DELETE ══ -->
+          <div class="confirm-dialog" id="confirm-delete">
+            <div class="confirm-box">
+              <div class="confirm-icon">🗑️</div>
+              <h3>Supprimer l'employé ?</h3>
+              <p>Cette action est irréversible.<br>L'entrée sera supprimée du JSON et du LDAP.</p>
+              <div class="confirm-btns">
+                <button class="btn btn-ghost" onclick="document.getElementById('confirm-delete').classList.remove('open')"><i class="fas fa-times"></i> Annuler</button>
+                <a id="confirm-delete-link" href="#" class="btn btn-danger"><i class="fas fa-trash"></i> Supprimer</a>
+              </div>
+            </div>
+          </div>
+
+          <script>
+          const employees = <?php echo json_encode($employees, JSON_UNESCAPED_UNICODE); ?>;
+          const departements_js = <?php echo json_encode(array_map(fn($d) => ['label'=>$d['label'],'icon'=>$d['icon'],'color'=>$d['color']], $departements), JSON_UNESCAPED_UNICODE); ?>;
+
+          // Clock
+          function updateClock() {
+            const now = new Date();
+            document.getElementById('clock').textContent = now.toLocaleTimeString('fr-FR', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+          }
+          setInterval(updateClock, 1000); updateClock();
+
+          function showSection(name, el) {
+            document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+            document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+            document.getElementById('section-' + name).classList.add('active');
+            const titles = {dashboard:'Tableau de bord', employees:'Employés', add:'Nouvel employé', badges:'Générateur de badges'};
+            document.getElementById('page-title').textContent = titles[name] || name;
+            if (el) el.classList.add('active');
+          }
+
+          function previewPhoto(input) {
+            if (input.files && input.files[0]) {
+              const reader = new FileReader();
+              reader.onload = e => {
+                document.getElementById('photo-preview-container').innerHTML =
+                  '<img src="' + e.target.result + '" class="photo-preview-img"><div style="font-size:12px;color:var(--success);margin-top:4px;"><i class="fas fa-check-circle"></i> Photo sélectionnée</div>';
+              };
+              reader.readAsDataURL(input.files[0]);
+            }
+          }
+
+          function openEdit(idx) {
+            const emp = employees[idx];
+            document.getElementById('edit-idx').value = idx;
+            document.getElementById('edit-prenom').value = emp.prenom || '';
+            document.getElementById('edit-nom').value = emp.nom || '';
+            document.getElementById('edit-email').value = emp.email || '';
+            document.getElementById('edit-telephone').value = emp.telephone || '';
+            document.getElementById('edit-departement').value = emp.departement || '';
+            document.getElementById('edit-poste').value = emp.poste || '';
+            document.getElementById('edit-modal').classList.add('open');
+          }
+
+          function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+          function openSuspend(idx) {
+            document.getElementById('suspend-temp-btn').href = '?suspend=' + idx + '&type=temporaire';
+            document.getElementById('suspend-def-btn').href = '?suspend=' + idx + '&type=definitif';
+            document.getElementById('suspend-modal').classList.add('open');
+          }
+
+          function confirmDelete(idx) {
+            document.getElementById('confirm-delete-link').href = '?delete=' + idx;
+            document.getElementById('confirm-delete').classList.add('open');
+          }
+
+          function filterTable() {
+            const q = document.getElementById('search-input').value.toLowerCase();
+            document.querySelectorAll('#emp-table tbody tr[data-search]').forEach(row => {
+              row.style.display = row.dataset.search.includes(q) ? '' : 'none';
+            });
+          }
+
+          let activeStatus = 'all', activeDept = '';
+          function filterStatus(status, btn) {
+            activeStatus = status; activeDept = '';
+            document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active'); applyFilters();
+          }
+          function filterDept(dept, btn) {
+            activeDept = dept; activeStatus = 'all';
+            document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active'); applyFilters();
+          }
+          function applyFilters() {
+            document.querySelectorAll('#emp-table tbody tr[data-status]').forEach(row => {
+              const statusOk = activeStatus === 'all' || row.dataset.status === activeStatus;
+              const deptOk = activeDept === '' || row.dataset.dept === activeDept;
+              row.style.display = (statusOk && deptOk) ? '' : 'none';
+            });
+          }
+
+          // ══ Badge generation with cross-origin QR fix ══
+          function generateBadge(idx) {
+            const emp = employees[idx];
+            showSection('badges', document.querySelectorAll('.nav-item')[3]);
+
+            // Highlight selected in list
+            document.querySelectorAll('.emp-pick-item').forEach(el => el.classList.remove('selected'));
+            const pickEl = document.getElementById('pick-' + idx);
+            if (pickEl) pickEl.classList.add('selected');
+
+            const dept = departements_js[emp.departement] || {label: emp.departement || '', icon: '🏢', color: '#1a73e8'};
+            const initials = ((emp.prenom||'?').charAt(0) + (emp.nom||'?').charAt(0)).toUpperCase();
+            const createdAt = emp.created_at ? emp.created_at.split(' ')[0] : 'N/A';
+            const tel = emp.telephone || 'Non renseigné';
+            const qrData = encodeURIComponent(JSON.stringify({uid:emp.uid,name:(emp.prenom||'')+' '+(emp.nom||''),poste:emp.poste||'',tel:tel}));
+            const qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=100x100&bgcolor=1244a8&color=93c5fd&qzone=1&data=' + qrData;
+
+            const photoHtml = (emp.photo && emp.photo !== '')
+              ? '<img src="' + emp.photo + '" class="badge-photo" crossorigin="anonymous" onerror="this.outerHTML=\'<div class=badge-photo-placeholder>' + initials + '</div>\'">'
+              : '<div class="badge-photo-placeholder">' + initials + '</div>';
+
+            const cardHtml =
+              '<div id="badge-card-render" class="badge-card">' +
+                '<div class="badge-top">' +
+                  '<div class="badge-company-name">SEIMP Enterprise</div>' +
+                  '<div class="badge-type-chip">Badge Officiel</div>' +
+                '</div>' +
+                '<div class="badge-center">' +
+                  '<div class="badge-photo-wrap">' + photoHtml + '</div>' +
+                  '<div class="badge-info">' +
+                    '<div class="badge-name">' + (emp.prenom||'') + ' ' + (emp.nom||'') + '</div>' +
+                    '<div class="badge-title">' + (emp.poste||'N/A') + '</div>' +
+                    '<div class="badge-dept">' + dept.icon + ' ' + dept.label + '</div>' +
+                  '</div>' +
+                '</div>' +
+                '<div class="badge-divider"></div>' +
+                '<div class="badge-fields">' +
+                  '<div class="badge-field"><div class="badge-field-label">Identifiant</div><div class="badge-field-value" style="font-family:monospace;color:#93c5fd;">' + (emp.uid||'—') + '</div></div>' +
+                  '<div class="badge-field"><div class="badge-field-label">Téléphone</div><div class="badge-field-value">' + tel + '</div></div>' +
+                '</div>' +
+                '<div class="badge-bottom">' +
+                  '<div class="badge-meta">' +
+                    '<div class="badge-uid">#' + (emp.uid||'').toUpperCase() + '</div>' +
+                    '<div class="badge-date">Émis le ' + createdAt + '</div>' +
+                  '</div>' +
+                  '<div class="badge-qr-wrap"><div class="badge-qr-inner" id="qr-container"><img id="qr-img" width="100" height="100" style="display:block;border-radius:4px;"></div></div>' +
+                '</div>' +
+                '<div class="badge-disclaimer">Badge officiel SEIMP — Ne pas reproduire sans autorisation</div>' +
+              '</div>';
+
+            document.getElementById('badge-preview-area').innerHTML = cardHtml;
+
+            // Load QR as base64 to bypass html2canvas cross-origin issue
+            const qrImg = document.getElementById('qr-img');
+            fetch(qrUrl)
+              .then(r => r.blob())
+              .then(blob => {
+                const reader = new FileReader();
+                reader.onloadend = () => { qrImg.src = reader.result; };
+                reader.readAsDataURL(blob);
+              })
+              .catch(() => { qrImg.src = ''; document.getElementById('qr-container').innerHTML = '<div style="width:100px;height:100px;background:#1244a8;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:9px;color:#1a73e8;text-align:center;padding:6px;">QR Code</div>'; });
+
+            document.getElementById('download-badge-btn').style.display = 'inline-flex';
+          }
+
+          function downloadBadge() {
+            const card = document.getElementById('badge-card-render');
+            html2canvas(card, {
+              scale: 3,
+              backgroundColor: '#1244a8',
+              useCORS: true,
+              allowTaint: false,
+              logging: false
+            }).then(canvas => {
+              const a = document.createElement('a');
+              a.download = 'badge_seimp_' + Date.now() + '.png';
+              a.href = canvas.toDataURL('image/png');
+              a.click();
+            });
+          }
+
+          document.querySelectorAll('.modal-overlay').forEach(m => {
+            m.addEventListener('click', e => { if (e.target === m) m.classList.remove('open'); });
+          });
+          </script>
+          </body>
+          </html>
+
+    - name: Redémarrer Apache
+      systemd:
+        name: apache2
+        state: restarted
+        enabled: yes

@@ -1,0 +1,379 @@
+---
+- name: Installer PHP et modules LDAP
+  apt:
+    name:
+      - php
+      - php-ldap
+      - libapache2-mod-php
+    state: present
+
+- name: Créer l'interface de gestion des employés
+  copy:
+    dest: /var/www/html/employes.php
+    owner: www-data
+    group: www-data
+    mode: 0644
+    content: |
+      <?php
+      $ldap_host = "localhost";
+      $ldap_port = 389;
+      $ldap_dn = "cn=admin,dc=nodomain";
+      $ldap_password = "admin123";
+      $base_dn = "dc=nodomain";
+      $people_dn = "ou=people,dc=nodomain";
+
+      $ldapconn = ldap_connect($ldap_host, $ldap_port);
+      ldap_set_option($ldapconn, LDAP_OPT_PROTOCOL_VERSION, 3);
+      @ldap_bind($ldapconn, $ldap_dn, $ldap_password);
+
+      $departements = [
+          'direction' => ['name' => '🏢 Direction Générale', 'gid' => 10000, 'icon' => 'fa-building', 'postes' => [
+              'pdg' => 'Président Directeur Général',
+              'dg_adjoint' => 'Directeur Général Adjoint',
+              'secretaire_direction' => 'Secrétaire de Direction'
+          ]],
+          'rh' => ['name' => '👥 Ressources Humaines', 'gid' => 10001, 'icon' => 'fa-users', 'postes' => [
+              'drh' => 'Directeur des Ressources Humaines',
+              'responsable_paie' => 'Responsable Paie',
+              'charge_recrutement' => 'Chargé de Recrutement',
+              'assistant_rh' => 'Assistant RH',
+              'formation' => 'Responsable Formation'
+          ]],
+          'it' => ['name' => '💻 Informatique', 'gid' => 10002, 'icon' => 'fa-laptop-code', 'postes' => [
+              'dsi' => 'Directeur des Systèmes d\'Information',
+              'architecte_reseau' => 'Architecte Réseau',
+              'devops' => 'Ingénieur DevOps',
+              'developpeur' => 'Développeur',
+              'technicien_support' => 'Technicien Support',
+              'admin_bdd' => 'Administrateur Base de Données',
+              'cybersecurite' => 'Responsable Cybersécurité',
+              'data_scientist' => 'Data Scientist'
+          ]],
+          'securite' => ['name' => '🛡️ Sécurité', 'gid' => 10003, 'icon' => 'fa-shield-alt', 'postes' => [
+              'chef_securite' => 'Chef de la Sécurité',
+              'superviseur' => 'Superviseur Sécurité',
+              'agent_poste_central' => 'Agent Poste Central',
+              'agent_rond_point' => 'Agent Rond-point',
+              'agent_accueil' => 'Agent d\'Accueil',
+              'agent_parking' => 'Agent Parking',
+              'agent_nuit' => 'Agent de Nuit',
+              'agent_rondes' => 'Agent de Rondes'
+          ]],
+          'menage' => ['name' => '🧹 Ménage & Propreté', 'gid' => 10004, 'icon' => 'fa-broom', 'postes' => [
+              'chef_menage' => 'Chef d\'Équipe Ménage',
+              'superviseur_menage' => 'Superviseur Propreté',
+              'agent_nettoyage_bureaux' => 'Agent Nettoyage Bureaux',
+              'agent_sanitaires' => 'Agent Sanitaires',
+              'agent_couloirs' => 'Agent Couloirs',
+              'agent_parking_ext' => 'Agent Parking',
+              'agent_vitreries' => 'Agent Vitreries',
+              'agent_nuit_menage' => 'Agent de Nuit'
+          ]],
+          'commercial' => ['name' => '📈 Commercial', 'gid' => 10001, 'icon' => 'fa-chart-line', 'postes' => [
+              'directeur_commercial' => 'Directeur Commercial',
+              'responsable_grandes_comptes' => 'Responsable Grands Comptes',
+              'commercial_terrain' => 'Commercial Terrain',
+              'commercial_interne' => 'Commercial Interne',
+              'charge_clientele' => 'Chargé de Clientèle',
+              'business_dev' => 'Business Developer'
+          ]],
+          'finance' => ['name' => '💰 Finance', 'gid' => 10001, 'icon' => 'fa-coins', 'postes' => [
+              'directeur_financier' => 'Directeur Financier',
+              'chef_comptable' => 'Chef Comptable',
+              'comptable_fournisseurs' => 'Comptable Fournisseurs',
+              'comptable_clients' => 'Comptable Clients',
+              'tresorier' => 'Trésorier',
+              'analyste_financier' => 'Analyste Financier'
+          ]],
+          'logistique' => ['name' => '📦 Logistique', 'gid' => 10001, 'icon' => 'fa-truck', 'postes' => [
+              'directeur_logistique' => 'Directeur Logistique',
+              'responsable_entrepot' => 'Responsable Entrepôt',
+              'preparateur_commandes' => 'Préparateur Commandes',
+              'cariste' => 'Cariste',
+              'magasinier' => 'Magasinier',
+              'transport' => 'Responsable Transport'
+          ]],
+          'marketing' => ['name' => '🎯 Marketing', 'gid' => 10001, 'icon' => 'fa-megaphone', 'postes' => [
+              'directeur_marketing' => 'Directeur Marketing',
+              'community_manager' => 'Community Manager',
+              'graphiste' => 'Graphiste',
+              'webmaster' => 'Webmaster',
+              'charge_communication' => 'Chargé de Communication',
+              'seo_specialist' => 'SEO Specialist'
+          ]],
+          'juridique' => ['name' => '⚖️ Juridique', 'gid' => 10000, 'icon' => 'fa-gavel', 'postes' => [
+              'directeur_juridique' => 'Directeur Juridique',
+              'juriste' => 'Juriste',
+              'conformite' => 'Responsable Conformité',
+              'assistant_juridique' => 'Assistant Juridique'
+          ]],
+          'maintenance' => ['name' => '🔧 Maintenance', 'gid' => 10002, 'icon' => 'fa-wrench', 'postes' => [
+              'chef_maintenance' => 'Chef de Maintenance',
+              'technicien_clim' => 'Technicien Climatisation',
+              'electricien' => 'Électricien',
+              'plombier' => 'Plombier',
+              'maintenance_batiment' => 'Maintenance Bâtiment'
+          ]],
+          'accueil' => ['name' => '🏨 Accueil', 'gid' => 10001, 'icon' => 'fa-door-open', 'postes' => [
+              'responsable_accueil' => 'Responsable Accueil',
+              'hotesse_accueil' => 'Hôtesse d\'Accueil',
+              'standardiste' => 'Standardiste',
+              'agent_information' => 'Agent d\'Information'
+          ]],
+          'cantine' => ['name' => '🍽️ Restauration', 'gid' => 10004, 'icon' => 'fa-utensils', 'postes' => [
+              'chef_cuisine' => 'Chef de Cuisine',
+              'commis_cuisine' => 'Commis de Cuisine',
+              'serveur' => 'Serveur',
+              'plongeur' => 'Plongeur',
+              'gerant_cantine' => 'Gérant de la Cantine'
+          ]]
+      ];
+
+      function generate_uid($prenom, $nom) {
+          $uid = strtolower(substr($prenom, 0, 1) . $nom);
+          return preg_replace('/[^a-z0-9]/', '', $uid);
+      }
+
+      $message = "";
+      if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+          $uid = generate_uid($_POST['prenom'], $_POST['nom']);
+          $uidNumber = rand(20000, 30000);
+          $gidNumber = $departements[$_POST['departement']]['gid'];
+          $salt = substr(sha1(uniqid()), 0, 8);
+          $password_hash = "{SSHA}" . base64_encode(sha1($_POST['password'] . $salt, true) . $salt);
+          
+          $dn = "uid=" . $uid . ",ou=people,dc=nodomain";
+          $info = [
+              "objectClass" => ["inetOrgPerson", "posixAccount", "shadowAccount"],
+              "uid" => $uid,
+              "sn" => $_POST['nom'],
+              "givenName" => $_POST['prenom'],
+              "cn" => $_POST['prenom'] . " " . $_POST['nom'],
+              "displayName" => $_POST['poste'],
+              "uidNumber" => $uidNumber,
+              "gidNumber" => $gidNumber,
+              "homeDirectory" => "/home/" . $uid,
+              "userPassword" => $password_hash,
+              "loginShell" => "/bin/bash",
+              "title" => $_POST['poste'],
+              "department" => $departements[$_POST['departement']]['name'],
+              "telephoneNumber" => $_POST['telephone'],
+              "mobile" => $_POST['mobile'],
+              "mail" => $_POST['email'],
+              "description" => $_POST['description']
+          ];
+          
+          if (@ldap_add($ldapconn, $dn, $info)) {
+              $message = '<div class="alert alert-success"><i class="fas fa-check-circle"></i> ✅ Employé ajouté avec succès !<br>UID: ' . $uid . '<br>Mot de passe: ' . $_POST['password'] . '</div>';
+          } else {
+              $message = '<div class="alert alert-danger"><i class="fas fa-exclamation-triangle"></i> ❌ Erreur: ' . ldap_error($ldapconn) . '</div>';
+          }
+      }
+      ?>
+      <!DOCTYPE html>
+      <html lang="fr">
+      <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>SEIMP - Gestion des Employés</title>
+          <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+          <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+          <style>
+              body { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; font-family: 'Segoe UI', sans-serif; }
+              .card { border-radius: 20px; box-shadow: 0 20px 40px rgba(0,0,0,0.1); overflow: hidden; }
+              .card-header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; }
+              .form-control, .form-select { border-radius: 12px; padding: 12px; margin-bottom: 10px; border: 2px solid #e0e0e0; transition: all 0.3s; }
+              .form-control:focus, .form-select:focus { border-color: #667eea; box-shadow: 0 0 0 0.2rem rgba(102,126,234,0.25); }
+              .btn-primary { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border: none; padding: 12px; border-radius: 12px; font-weight: bold; }
+              .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(102,126,234,0.4); }
+              .departement-badge { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 5px 12px; border-radius: 20px; font-size: 12px; display: inline-block; margin: 2px; }
+              .stats-card { background: white; border-radius: 15px; padding: 15px; text-align: center; transition: transform 0.3s; cursor: pointer; }
+              .stats-card:hover { transform: translateY(-5px); }
+              h1, h2, h3, h4 { font-weight: 600; }
+          </style>
+      </head>
+      <body>
+          <div class="container py-4">
+              <div class="row">
+                  <div class="col-lg-8 mx-auto">
+                      <div class="card">
+                          <div class="card-header">
+                              <div class="d-flex justify-content-between align-items-center">
+                                  <div>
+                                      <i class="fas fa-id-card fa-2x me-3"></i>
+                                      <h2 class="d-inline">Gestion des Employés</h2>
+                                  </div>
+                                  <div>
+                                      <span class="badge bg-light text-dark p-2"><i class="fas fa-users me-1"></i> SEIMP Enterprise</span>
+                                  </div>
+                              </div>
+                          </div>
+                          <div class="card-body p-4">
+                              <?php echo $message; ?>
+                              
+                              <ul class="nav nav-tabs mb-4" id="myTab" role="tablist">
+                                  <li class="nav-item" role="presentation">
+                                      <button class="nav-link active" id="add-tab" data-bs-toggle="tab" data-bs-target="#add" type="button" role="tab">
+                                          <i class="fas fa-user-plus me-2"></i>Nouvel Employé
+                                      </button>
+                                  </li>
+                                  <li class="nav-item" role="presentation">
+                                      <button class="nav-link" id="list-tab" data-bs-toggle="tab" data-bs-target="#list" type="button" role="tab">
+                                          <i class="fas fa-list me-2"></i>Liste des Employés
+                                      </button>
+                                  </li>
+                                  <li class="nav-item" role="presentation">
+                                      <button class="nav-link" id="stats-tab" data-bs-toggle="tab" data-bs-target="#stats" type="button" role="tab">
+                                          <i class="fas fa-chart-pie me-2"></i>Statistiques
+                                      </button>
+                                  </li>
+                              </ul>
+                              
+                              <div class="tab-content">
+                                  <div class="tab-pane fade show active" id="add" role="tabpanel">
+                                      <form method="POST">
+                                          <div class="row">
+                                              <div class="col-md-6">
+                                                  <label class="form-label"><i class="fas fa-user me-1"></i> Prénom *</label>
+                                                  <input type="text" name="prenom" class="form-control" required>
+                                              </div>
+                                              <div class="col-md-6">
+                                                  <label class="form-label"><i class="fas fa-user me-1"></i> Nom *</label>
+                                                  <input type="text" name="nom" class="form-control" required>
+                                              </div>
+                                          </div>
+                                          
+                                          <div class="row">
+                                              <div class="col-md-6">
+                                                  <label class="form-label"><i class="fas fa-building me-1"></i> Département *</label>
+                                                  <select name="departement" id="departement" class="form-select" required>
+                                                      <option value="">Sélectionner un département</option>
+                                                      <?php foreach($departements as $key => $dept): ?>
+                                                      <option value="<?php echo $key; ?>">
+                                                          <i class="fas <?php echo $dept['icon']; ?>"></i> <?php echo $dept['name']; ?>
+                                                      </option>
+                                                      <?php endforeach; ?>
+                                                  </select>
+                                              </div>
+                                              <div class="col-md-6">
+                                                  <label class="form-label"><i class="fas fa-briefcase me-1"></i> Poste *</label>
+                                                  <select name="poste" id="poste" class="form-select" required>
+                                                      <option value="">Sélectionner d'abord un département</option>
+                                                  </select>
+                                              </div>
+                                          </div>
+                                          
+                                          <div class="row">
+                                              <div class="col-md-6">
+                                                  <label class="form-label"><i class="fas fa-envelope me-1"></i> Email *</label>
+                                                  <input type="email" name="email" class="form-control" required>
+                                              </div>
+                                              <div class="col-md-6">
+                                                  <label class="form-label"><i class="fas fa-lock me-1"></i> Mot de passe *</label>
+                                                  <input type="password" name="password" class="form-control" required>
+                                              </div>
+                                          </div>
+                                          
+                                          <div class="row">
+                                              <div class="col-md-6">
+                                                  <label class="form-label"><i class="fas fa-phone me-1"></i> Téléphone</label>
+                                                  <input type="text" name="telephone" class="form-control">
+                                              </div>
+                                              <div class="col-md-6">
+                                                  <label class="form-label"><i class="fas fa-mobile-alt me-1"></i> Mobile</label>
+                                                  <input type="text" name="mobile" class="form-control">
+                                              </div>
+                                          </div>
+                                          
+                                          <div class="mb-3">
+                                              <label class="form-label"><i class="fas fa-info-circle me-1"></i> Informations complémentaires</label>
+                                              <textarea name="description" class="form-control" rows="3" placeholder="Date d'embauche, contrat, remarques..."></textarea>
+                                          </div>
+                                          
+                                          <button type="submit" class="btn btn-primary w-100">
+                                              <i class="fas fa-save me-2"></i>Enregistrer l'employé
+                                          </button>
+                                      </form>
+                                  </div>
+                                  
+                                  <div class="tab-pane fade" id="list" role="tabpanel">
+                                      <div class="list-group">
+                                          <?php
+                                          $search = @ldap_search($ldapconn, $people_dn, "(objectClass=inetOrgPerson)");
+                                          if($search) {
+                                              $entries = ldap_get_entries($ldapconn, $search);
+                                              for($i=0; $i < $entries["count"]; $i++):
+                                                  if(isset($entries[$i]["cn"][0])):
+                                          ?>
+                                          <div class="list-group-item list-group-item-action">
+                                              <div class="d-flex justify-content-between align-items-center">
+                                                  <div>
+                                                      <i class="fas fa-user-circle fa-2x me-3 text-primary"></i>
+                                                      <strong><?php echo $entries[$i]["cn"][0]; ?></strong><br>
+                                                      <small class="text-muted">
+                                                          <?php echo $entries[$i]["title"][0] ?? "N/A"; ?> | 
+                                                          <?php echo $entries[$i]["department"][0] ?? "N/A"; ?>
+                                                      </small>
+                                                  </div>
+                                                  <div>
+                                                      <span class="badge bg-success">Actif</span>
+                                                      <span class="badge bg-info">UID: <?php echo $entries[$i]["uid"][0]; ?></span>
+                                                  </div>
+                                              </div>
+                                          </div>
+                                          <?php 
+                                                  endif;
+                                              endfor;
+                                          }
+                                          ?>
+                                      </div>
+                                  </div>
+                                  
+                                  <div class="tab-pane fade" id="stats" role="tabpanel">
+                                      <div class="row">
+                                          <?php foreach($departements as $key => $dept): ?>
+                                          <div class="col-md-6 mb-3">
+                                              <div class="stats-card">
+                                                  <i class="fas <?php echo $dept['icon']; ?> fa-3x mb-2" style="color: #667eea;"></i>
+                                                  <h6><?php echo $dept['name']; ?></h6>
+                                                  <h3>0</h3>
+                                                  <small class="text-muted">employés</small>
+                                              </div>
+                                          </div>
+                                          <?php endforeach; ?>
+                                      </div>
+                                  </div>
+                              </div>
+                          </div>
+                      </div>
+                  </div>
+              </div>
+          </div>
+          
+          <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+          <script>
+              const departements = <?php echo json_encode($departements); ?>;
+              
+              document.getElementById('departement').addEventListener('change', function() {
+                  const dept = this.value;
+                  const posteSelect = document.getElementById('poste');
+                  posteSelect.innerHTML = '<option value="">Sélectionner un poste</option>';
+                  
+                  if (dept && departements[dept]) {
+                      for (const [key, value] of Object.entries(departements[dept].postes)) {
+                          const option = document.createElement('option');
+                          option.value = value;
+                          option.textContent = value;
+                          posteSelect.appendChild(option);
+                      }
+                  }
+              });
+          </script>
+      </body>
+      </html>
+
+- name: Redémarrer Apache
+  systemd:
+    name: apache2
+    state: restarted
+    enabled: yes

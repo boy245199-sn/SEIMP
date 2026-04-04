@@ -1,0 +1,253 @@
+---
+- name: Mise à jour des paquets
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+
+- name: Installer les dépendances système pour python-ldap
+  apt:
+    name:
+      - python3
+      - python3-pip
+      - python3-venv
+      - sqlite3
+      - git
+      - curl
+      - libldap2-dev
+      - libsasl2-dev
+      - libssl-dev
+      - build-essential
+    state: present
+
+- name: Créer l'utilisateur badge
+  user:
+    name: badge
+    shell: /bin/bash
+    home: /opt/badge
+    system: yes
+
+- name: Créer le répertoire de l'application
+  file:
+    path: /opt/badge
+    state: directory
+    owner: badge
+    group: badge
+    mode: 0755
+
+- name: Créer le répertoire des logs
+  file:
+    path: /var/log/badge
+    state: directory
+    owner: badge
+    group: badge
+    mode: 0755
+
+- name: Créer le virtualenv
+  command: python3 -m venv /opt/badge/venv
+  args:
+    creates: /opt/badge/venv/bin/python
+
+- name: Installer les packages Python
+  pip:
+    name:
+      - flask
+      - flask-httpauth
+      - python-ldap
+      - requests
+      - gunicorn
+    virtualenv: /opt/badge/venv
+    virtualenv_command: python3 -m venv
+
+- name: Créer l'application Flask
+  copy:
+    dest: /opt/badge/app.py
+    owner: badge
+    group: badge
+    mode: 0644
+    content: |
+      import sqlite3
+      import datetime
+      import json
+      from flask import Flask, request, jsonify
+      from flask_httpauth import HTTPBasicAuth
+      import ldap
+
+      app = Flask(__name__)
+      auth = HTTPBasicAuth()
+
+      LDAP_SERVER = "ldap://192.168.10.10"
+      LDAP_BASE_DN = "ou=people,dc=nodomain"
+      LDAP_ADMIN_DN = "cn=admin,dc=nodomain"
+      LDAP_ADMIN_PASSWORD = "admin123"
+
+      def init_db():
+          conn = sqlite3.connect('/opt/badge/badge.db')
+          c = conn.cursor()
+          c.execute('''CREATE TABLE IF NOT EXISTS logs
+                       (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        badge_id TEXT,
+                        user_dn TEXT,
+                        access_granted INTEGER,
+                        timestamp TEXT,
+                        details TEXT)''')
+          c.execute('''CREATE TABLE IF NOT EXISTS badges
+                       (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        badge_uid TEXT UNIQUE,
+                        user_dn TEXT,
+                        active INTEGER DEFAULT 1)''')
+          conn.commit()
+          conn.close()
+
+      init_db()
+
+      @auth.verify_password
+      def verify_password(username, password):
+          try:
+              conn = ldap.initialize(LDAP_SERVER)
+              conn.simple_bind_s(f"cn={username},dc=nodomain", password)
+              return username
+          except:
+              return None
+
+      @app.route('/badge/scan', methods=['POST'])
+      def scan_badge():
+          data = request.get_json()
+          badge_uid = data.get('badge_uid')
+          reader_id = data.get('reader_id', 'unknown')
+
+          if not badge_uid:
+              return jsonify({'error': 'badge_uid required'}), 400
+
+          conn = sqlite3.connect('/opt/badge/badge.db')
+          c = conn.cursor()
+          c.execute("SELECT user_dn, active FROM badges WHERE badge_uid = ?", (badge_uid,))
+          result = c.fetchone()
+
+          if not result:
+              access_granted = 0
+              user_dn = None
+              details = "Badge non enregistré"
+          else:
+              user_dn, active = result
+              if not active:
+                  access_granted = 0
+                  details = "Badge désactivé"
+              else:
+                  try:
+                      conn_ldap = ldap.initialize(LDAP_SERVER)
+                      conn_ldap.simple_bind_s(LDAP_ADMIN_DN, LDAP_ADMIN_PASSWORD)
+                      result_ldap = conn_ldap.search_s(user_dn, ldap.SCOPE_BASE, '(objectClass=*)', ['gidNumber'])
+                      if result_ldap:
+                          gid = result_ldap[0][1].get('gidNumber', [b'10001'])[0].decode()
+                          if gid == '10002':
+                              access_granted = 1
+                              details = f"Accès autorisé - Membre it_team (gid={gid})"
+                          else:
+                              access_granted = 0
+                              details = f"Accès refusé - Groupe non autorisé (gid={gid})"
+                      else:
+                          access_granted = 0
+                          details = "Utilisateur non trouvé dans LDAP"
+                  except Exception as e:
+                      access_granted = 0
+                      details = f"Erreur LDAP: {str(e)}"
+
+          timestamp = datetime.datetime.now().isoformat()
+          c.execute("INSERT INTO logs (badge_id, user_dn, access_granted, timestamp, details) VALUES (?, ?, ?, ?, ?)",
+                    (badge_uid, user_dn, access_granted, timestamp, details))
+          conn.commit()
+          conn.close()
+
+          return jsonify({
+              'badge_uid': badge_uid,
+              'access_granted': access_granted,
+              'user_dn': user_dn,
+              'timestamp': timestamp,
+              'details': details
+          })
+
+      @app.route('/badge/register', methods=['POST'])
+      @auth.login_required
+      def register_badge():
+          data = request.get_json()
+          badge_uid = data.get('badge_uid')
+          user_dn = data.get('user_dn')
+
+          if not badge_uid or not user_dn:
+              return jsonify({'error': 'badge_uid and user_dn required'}), 400
+
+          conn = sqlite3.connect('/opt/badge/badge.db')
+          c = conn.cursor()
+          try:
+              c.execute("INSERT OR REPLACE INTO badges (badge_uid, user_dn, active) VALUES (?, ?, 1)", (badge_uid, user_dn))
+              conn.commit()
+              return jsonify({'message': 'Badge enregistré avec succès'})
+          except Exception as e:
+              return jsonify({'error': str(e)}), 500
+          finally:
+              conn.close()
+
+      @app.route('/badge/logs', methods=['GET'])
+      @auth.login_required
+      def get_logs():
+          limit = request.args.get('limit', 100)
+          conn = sqlite3.connect('/opt/badge/badge.db')
+          c = conn.cursor()
+          c.execute("SELECT * FROM logs ORDER BY id DESC LIMIT ?", (limit,))
+          rows = c.fetchall()
+          conn.close()
+          return jsonify({'logs': rows})
+
+      @app.route('/health', methods=['GET'])
+      def health():
+          return jsonify({'status': 'ok'})
+
+      if __name__ == '__main__':
+          app.run(host='0.0.0.0', port=5000)
+
+- name: Créer le service systemd
+  copy:
+    dest: /etc/systemd/system/badge-api.service
+    owner: root
+    group: root
+    mode: 0644
+    content: |
+      [Unit]
+      Description=Badge API Service
+      After=network.target
+
+      [Service]
+      Type=simple
+      User=badge
+      Group=badge
+      WorkingDirectory=/opt/badge
+      ExecStart=/opt/badge/venv/bin/gunicorn -b 0.0.0.0:5000 app:app
+      Restart=on-failure
+      RestartSec=5
+
+      [Install]
+      WantedBy=multi-user.target
+
+- name: Démarrer le service badge-api
+  systemd:
+    name: badge-api
+    daemon_reload: yes
+    enabled: yes
+    state: started
+
+- name: Attendre que l'API soit prête
+  wait_for:
+    port: 5000
+    delay: 5
+    timeout: 60
+
+- name: Vérifier l'API
+  uri:
+    url: http://localhost:5000/health
+    status_code: 200
+    timeout: 10
+  register: api_health
+
+- name: Succès
+  debug:
+    msg: "✅ API Badges accessible sur http://192.168.10.20:5000"
