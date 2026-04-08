@@ -1,5 +1,5 @@
 Vagrant.configure("2") do |config|
-  config.vm.boot_timeout = 600
+  config.vm.boot_timeout = 6000
   config.vm.box = "ubuntu/jammy64"  # Ubuntu 22.04
 
   machines = {

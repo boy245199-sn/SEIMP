@@ -1,0 +1,254 @@
+---
+- name: Installation complète Odoo avec LDAP
+  hosts: odoo
+  become: yes
+  tasks:
+    - name: Installer les dépendances système
+      apt:
+        name:
+          - python3-pip
+          - python3-dev
+          - build-essential
+          - libssl-dev
+          - libffi-dev
+          - libxml2-dev
+          - libxslt1-dev
+          - zlib1g-dev
+          - libjpeg-dev
+          - libpq-dev
+          - libldap2-dev
+          - libsasl2-dev
+          - postgresql
+          - postgresql-contrib
+          - git
+          - curl
+          - wget
+          - node-less
+          - npm
+        state: present
+
+    - name: Installer Python 3.11
+      apt:
+        name:
+          - python3.11
+          - python3.11-dev
+          - python3.11-venv
+          - python3.11-distutils
+        state: present
+
+    - name: Installer pip pour Python 3.11
+      shell: curl -sS https://bootstrap.pypa.io/get-pip.py | python3.11
+      changed_when: false
+
+    - name: Créer l'utilisateur Odoo
+      user:
+        name: odoo
+        shell: /bin/bash
+        home: /opt/odoo
+        system: yes
+
+    - name: Cloner Odoo 17
+      git:
+        repo: https://github.com/odoo/odoo.git
+        dest: /opt/odoo/odoo-17
+        version: 17.0
+        depth: 1
+
+    - name: Créer virtualenv
+      command: python3.11 -m venv /opt/odoo/venv
+      args:
+        creates: /opt/odoo/venv/bin/python
+
+    - name: Installer les dépendances Python
+      pip:
+        requirements: /opt/odoo/odoo-17/requirements.txt
+        virtualenv: /opt/odoo/venv
+        virtualenv_command: python3.11 -m venv
+
+    - name: Installer dépendances supplémentaires
+      pip:
+        name:
+          - psycopg2-binary
+          - python-ldap
+          - lxml
+          - gevent
+          - greenlet
+          - Pillow
+          - reportlab
+        virtualenv: /opt/odoo/venv
+        virtualenv_command: python3.11 -m venv
+
+    - name: Créer l'utilisateur PostgreSQL
+      shell: |
+        sudo -u postgres psql -c "CREATE USER odoo WITH PASSWORD 'odoo' CREATEDB;" 2>/dev/null || true
+        sudo -u postgres psql -c "ALTER USER odoo WITH PASSWORD 'odoo';" 2>/dev/null || true
+      ignore_errors: yes
+
+    - name: Créer la base de données
+      shell: |
+        sudo -u postgres psql -c "DROP DATABASE IF EXISTS seimp;" 2>/dev/null || true
+        sudo -u postgres psql -c "CREATE DATABASE seimp OWNER odoo;" 2>/dev/null || true
+      ignore_errors: yes
+
+    - name: Créer le fichier de configuration
+      copy:
+        content: |
+          [options]
+          admin_passwd = niang123
+          db_host = False
+          db_port = False
+          db_user = odoo
+          db_password = odoo
+          db_name = seimp
+          addons_path = /opt/odoo/odoo-17/addons
+          logfile = /var/log/odoo/odoo.log
+          log_level = info
+          workers = 0
+        dest: /etc/odoo.conf
+        mode: 0644
+        owner: odoo
+        group: odoo
+
+    - name: Créer le répertoire de logs
+      file:
+        path: /var/log/odoo
+        state: directory
+        owner: odoo
+        group: odoo
+        mode: 0755
+
+    - name: Créer le service systemd
+      copy:
+        content: |
+          [Unit]
+          Description=Odoo ERP
+          After=network.target postgresql.service
+
+          [Service]
+          Type=simple
+          User=odoo
+          Group=odoo
+          ExecStart=/opt/odoo/venv/bin/python /opt/odoo/odoo-17/odoo-bin -c /etc/odoo.conf
+          Restart=on-failure
+          RestartSec=5
+          LimitNOFILE=infinity
+
+          [Install]
+          WantedBy=multi-user.target
+        dest: /etc/systemd/system/odoo.service
+        mode: 0644
+
+    - name: Démarrer Odoo
+      systemd:
+        name: odoo
+        daemon_reload: yes
+        enabled: yes
+        state: restarted
+
+    - name: Attendre Odoo
+      wait_for:
+        port: 8069
+        delay: 20
+        timeout: 120
+
+    - name: Configurer LDAP via API
+      uri:
+        url: http://localhost:8069/web/database/create
+        method: POST
+        body_format: json
+        body:
+          master_pwd: niang123
+          name: seimp
+          admin_password: admin123
+          admin_email: admin@seimp.local
+          lang: fr_FR
+          country_code: SN
+        status_code: 200
+      register: db_create
+
+    - name: Installer module LDAP
+      shell: |
+        sleep 10
+        curl -X POST http://localhost:8069/web/session/authenticate \
+          -H 'Content-Type: application/json' \
+          -d '{"jsonrpc":"2.0","params":{"login":"admin","password":"admin123","db":"seimp"}}' -c /tmp/cookie.txt
+        
+        curl -X POST http://localhost:8069/web/dataset/call_kw \
+          -H 'Content-Type: application/json' \
+          -b /tmp/cookie.txt \
+          -d '{"jsonrpc":"2.0","method":"call","params":{"model":"ir.module.module","method":"button_immediate_install","args":[[(await self.env['ir.module.module'].search([["name","=","auth_ldap"]])).id]],"kwargs":{}}}'
+      ignore_errors: yes
+      changed_when: false
+
+    - name: Configurer paramètres LDAP
+      shell: |
+        curl -X POST http://localhost:8069/web/dataset/call_kw \
+          -H 'Content-Type: application/json' \
+          -b /tmp/cookie.txt \
+          -d '{"jsonrpc":"2.0","method":"call","params":{"model":"ir.config_parameter","method":"set_param","args":["auth_ldap.ldap_server","192.168.10.10"],"kwargs":{}}}'
+        
+        curl -X POST http://localhost:8069/web/dataset/call_kw \
+          -H 'Content-Type: application/json' \
+          -b /tmp/cookie.txt \
+          -d '{"jsonrpc":"2.0","method":"call","params":{"model":"ir.config_parameter","method":"set_param","args":["auth_ldap.ldap_server_port","389"],"kwargs":{}}}'
+        
+        curl -X POST http://localhost:8069/web/dataset/call_kw \
+          -H 'Content-Type: application/json' \
+          -b /tmp/cookie.txt \
+          -d '{"jsonrpc":"2.0","method":"call","params":{"model":"ir.config_parameter","method":"set_param","args":["auth_ldap.ldap_bind_user","cn=admin,dc=nodomain"],"kwargs":{}}}'
+        
+        curl -X POST http://localhost:8069/web/dataset/call_kw \
+          -H 'Content-Type: application/json' \
+          -b /tmp/cookie.txt \
+          -d '{"jsonrpc":"2.0","method":"call","params":{"model":"ir.config_parameter","method":"set_param","args":["auth_ldap.ldap_bind_password","niang123"],"kwargs":{}}}'
+        
+        curl -X POST http://localhost:8069/web/dataset/call_kw \
+          -H 'Content-Type: application/json' \
+          -b /tmp/cookie.txt \
+          -d '{"jsonrpc":"2.0","method":"call","params":{"model":"ir.config_parameter","method":"set_param","args":["auth_ldap.ldap_server_base","dc=nodomain"],"kwargs":{}}}'
+        
+        curl -X POST http://localhost:8069/web/dataset/call_kw \
+          -H 'Content-Type: application/json' \
+          -b /tmp/cookie.txt \
+          -d '{"jsonrpc":"2.0","method":"call","params":{"model":"ir.config_parameter","method":"set_param","args":["auth_ldap.ldap_user_base","ou=people,dc=nodomain"],"kwargs":{}}}'
+        
+        curl -X POST http://localhost:8069/web/dataset/call_kw \
+          -H 'Content-Type: application/json' \
+          -b /tmp/cookie.txt \
+          -d '{"jsonrpc":"2.0","method":"call","params":{"model":"ir.config_parameter","method":"set_param","args":["auth_ldap.ldap_user_filter","(&(objectClass=inetOrgPerson)(uid=%s))"],"kwargs":{}}}'
+        
+        curl -X POST http://localhost:8069/web/dataset/call_kw \
+          -H 'Content-Type: application/json' \
+          -b /tmp/cookie.txt \
+          -d '{"jsonrpc":"2.0","method":"call","params":{"model":"ir.config_parameter","method":"set_param","args":["auth_ldap.ldap_create_user","True"],"kwargs":{}}}'
+      ignore_errors: yes
+      changed_when: false
+
+    - name: Redémarrer Odoo
+      systemd:
+        name: odoo
+        state: restarted
+
+    - name: Attendre Odoo
+      wait_for:
+        port: 8069
+        delay: 15
+        timeout: 60
+
+    - name: Tester connexion avec dsulica
+      uri:
+        url: http://localhost:8069/web/session/authenticate
+        method: POST
+        body_format: json
+        body:
+          jsonrpc: "2.0"
+          params:
+            login: "dsulica"
+            password: "elcapo123"
+            db: "seimp"
+        status_code: 200
+      register: final_test
+
+    - name: Résultat final
+      debug:
+        msg: "✅ Connexion Odoo avec dsulica: {{ 'SUCCÈS' if final_test.status == 200 else 'ÉCHEC' }}"

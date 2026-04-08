@@ -1,0 +1,39 @@
+---
+- name: Configurer LDAP dans Nextcloud
+  hosts: nextcloud
+  become: yes
+  tasks:
+    - name: Activer l'application LDAP
+      command: sudo -u www-data php /var/www/html/nextcloud/occ app:enable user_ldap
+      register: ldap_enable
+      changed_when: false
+      ignore_errors: yes
+
+    - name: Créer la configuration LDAP
+      command: sudo -u www-data php /var/www/html/nextcloud/occ ldap:create-empty-config
+      register: ldap_config
+      changed_when: false
+      ignore_errors: yes
+
+    - name: Configurer serveur LDAP
+      shell: |
+        sudo -u www-data php /var/www/html/nextcloud/occ ldap:set-config s01 ldapHost 192.168.10.10
+        sudo -u www-data php /var/www/html/nextcloud/occ ldap:set-config s01 ldapPort 389
+        sudo -u www-data php /var/www/html/nextcloud/occ ldap:set-config s01 ldapAgentName cn=admin,dc=nodomain
+        sudo -u www-data php /var/www/html/nextcloud/occ ldap:set-config s01 ldapAgentPassword niang123
+        sudo -u www-data php /var/www/html/nextcloud/occ ldap:set-config s01 ldapBase dc=nodomain
+        sudo -u www-data php /var/www/html/nextcloud/occ ldap:set-config s01 ldapBaseUsers ou=people,dc=nodomain
+        sudo -u www-data php /var/www/html/nextcloud/occ ldap:set-config s01 ldapBaseGroups ou=groups,dc=nodomain
+        sudo -u www-data php /var/www/html/nextcloud/occ ldap:set-config s01 ldapUserFilter objectClass=inetOrgPerson
+        sudo -u www-data php /var/www/html/nextcloud/occ ldap:set-config s01 ldapLoginFilter '(&(objectClass=inetOrgPerson)(uid=%uid))'
+        sudo -u www-data php /var/www/html/nextcloud/occ ldap:set-config s01 ldapUserDisplayName displayName
+      changed_when: false
+
+    - name: Tester la connexion LDAP
+      command: sudo -u www-data php /var/www/html/nextcloud/occ ldap:test-config s01
+      register: test_result
+      changed_when: false
+
+    - name: Afficher résultat
+      debug:
+        msg: "{{ test_result.stdout }}"

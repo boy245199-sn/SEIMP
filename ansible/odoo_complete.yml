@@ -1,0 +1,177 @@
+---
+- name: Installation complète Odoo 17
+  hosts: odoo
+  become: yes
+  tasks:
+    - name: Mise à jour des paquets
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Installer les dépendances système
+      apt:
+        name:
+          - build-essential
+          - libssl-dev
+          - libffi-dev
+          - libxml2-dev
+          - libxslt1-dev
+          - zlib1g-dev
+          - libjpeg-dev
+          - libpq-dev
+          - libldap2-dev
+          - libsasl2-dev
+          - postgresql
+          - postgresql-contrib
+          - git
+          - curl
+          - wget
+          - unzip
+          - node-less
+          - npm
+          - python3-pip
+          - python3-dev
+          - python3-venv
+        state: present
+
+    - name: Installer Python 3.11 depuis deadsnakes
+      shell: |
+        add-apt-repository -y ppa:deadsnakes/ppa
+        apt-get update
+        apt-get install -y python3.11 python3.11-dev python3.11-venv python3.11-distutils
+      changed_when: false
+
+    - name: Installer pip pour Python 3.11
+      shell: curl -sS https://bootstrap.pypa.io/get-pip.py | python3.11
+      changed_when: false
+
+    - name: Créer l'utilisateur Odoo
+      user:
+        name: odoo
+        shell: /bin/bash
+        home: /opt/odoo
+        system: yes
+
+    - name: Supprimer l'ancien répertoire si existe
+      file:
+        path: /opt/odoo/odoo-17
+        state: absent
+
+    - name: Cloner Odoo 17 depuis GitHub
+      git:
+        repo: https://github.com/odoo/odoo.git
+        dest: /opt/odoo/odoo-17
+        version: 17.0
+        depth: 1
+        force: yes
+      register: git_clone
+      retries: 3
+      delay: 5
+      until: git_clone is success
+
+    - name: Créer virtualenv
+      command: python3.11 -m venv /opt/odoo/venv
+      args:
+        creates: /opt/odoo/venv/bin/python
+
+    - name: Mettre à jour pip dans venv
+      command: /opt/odoo/venv/bin/pip install --upgrade pip setuptools wheel
+
+    - name: Installer les dépendances Python
+      command: /opt/odoo/venv/bin/pip install -r /opt/odoo/odoo-17/requirements.txt
+      ignore_errors: yes
+
+    - name: Installer dépendances supplémentaires
+      command: /opt/odoo/venv/bin/pip install psycopg2-binary lxml gevent greenlet Pillow reportlab python-ldap
+
+    - name: Fixer permissions
+      file:
+        path: /opt/odoo
+        owner: odoo
+        group: odoo
+        recurse: yes
+
+    - name: Créer l'utilisateur PostgreSQL
+      shell: |
+        sudo -u postgres psql -c "CREATE USER odoo WITH PASSWORD 'odoo' CREATEDB;" 2>/dev/null || true
+        sudo -u postgres psql -c "ALTER USER odoo WITH PASSWORD 'odoo';" 2>/dev/null || true
+      ignore_errors: yes
+
+    - name: Créer le fichier de configuration
+      copy:
+        content: |
+          [options]
+          admin_passwd = niang123
+          db_host = False
+          db_port = False
+          db_user = odoo
+          db_password = odoo
+          addons_path = /opt/odoo/odoo-17/addons
+          logfile = /var/log/odoo/odoo.log
+          log_level = info
+          workers = 0
+        dest: /etc/odoo.conf
+        mode: 0644
+        owner: odoo
+        group: odoo
+
+    - name: Créer le répertoire de logs
+      file:
+        path: /var/log/odoo
+        state: directory
+        owner: odoo
+        group: odoo
+        mode: 0755
+
+    - name: Créer le service systemd
+      copy:
+        content: |
+          [Unit]
+          Description=Odoo ERP
+          After=network.target postgresql.service
+
+          [Service]
+          Type=simple
+          User=odoo
+          Group=odoo
+          ExecStart=/opt/odoo/venv/bin/python /opt/odoo/odoo-17/odoo-bin -c /etc/odoo.conf
+          Restart=on-failure
+          RestartSec=5
+          LimitNOFILE=infinity
+
+          [Install]
+          WantedBy=multi-user.target
+        dest: /etc/systemd/system/odoo.service
+        mode: 0644
+
+    - name: Redémarrer PostgreSQL
+      systemd:
+        name: postgresql
+        state: restarted
+
+    - name: Démarrer Odoo
+      systemd:
+        name: odoo
+        daemon_reload: yes
+        enabled: yes
+        state: restarted
+
+    - name: Attendre Odoo
+      wait_for:
+        port: 8069
+        delay: 20
+        timeout: 180
+
+    - name: Vérifier Odoo
+      uri:
+        url: http://localhost:8069
+        status_code: 200
+        timeout: 30
+      register: result
+      until: result.status == 200
+      retries: 10
+      delay: 10
+
+    - name: Succès
+      debug:
+        msg: "✅ Odoo accessible sur http://192.168.10.12:8069 (Master: niang123)"

@@ -1,0 +1,20 @@
+---
+- name: Créer la base SEIM en tant qu'utilisateur odoo
+  hosts: odoo
+  become: yes
+  tasks:
+
+    - name: Créer base SEIM
+      shell: |
+        /opt/odoo/venv/bin/python3 /opt/odoo/odoo-17/odoo-bin \
+        -d SEIM --db-filter=SEIM --without-demo=all --init=base --stop-after-init --no-http
+      retries: 3
+      delay: 15
+      register: create_db
+      until: create_db.rc == 0
+      become_user: odoo
+
+    - name: Vérifier succès
+      debug:
+        msg: "✅ Base SEIM créée avec succès"
+      when: create_db.rc == 0

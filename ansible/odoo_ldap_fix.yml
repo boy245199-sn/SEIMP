@@ -1,0 +1,100 @@
+---
+- name: Réparer et configurer LDAP dans Odoo
+  hosts: odoo
+  become: yes
+
+  tasks:
+    # 🔥 réparer pip proprement
+    - name: Réparer Python et pip
+      raw: |
+        apt-get update -y
+        apt-get install -y python3-pip python3-venv python3-packaging
+        python3 -m ensurepip --upgrade || true
+        apt-get install --reinstall -y python3-pip
+
+    # 🔥 installer dépendances avec pip direct (PAS python -m pip)
+    - name: Installer dépendances Python (version stable)
+      shell: |
+        pip3 install --upgrade pip
+        pip3 install psycopg2-binary setuptools wheel packaging
+      args:
+        executable: /bin/bash
+
+    - name: S'assurer que odoo-bin utilise Python 3
+      lineinfile:
+        path: /opt/odoo/odoo-17/odoo-bin
+        regexp: '^#!.*'
+        line: '#!/usr/bin/python3'
+        firstmatch: yes
+
+    - name: Désinstaller complètement le module LDAP
+      shell: |
+        sudo -u odoo psql -d seimp -c "UPDATE ir_module_module SET state='uninstalled' WHERE name='auth_ldap';"
+      ignore_errors: yes
+
+    - name: Supprimer les anciens paramètres LDAP
+      shell: |
+        sudo -u odoo psql -d seimp -c "DELETE FROM ir_config_parameter WHERE key LIKE 'auth_ldap%';"
+      ignore_errors: yes
+
+    - name: Installer le module LDAP
+      shell: |
+        sudo -u odoo /opt/odoo/odoo-17/odoo-bin -c /etc/odoo.conf --stop-after-init -i auth_ldap --log-level=error
+      register: install_result
+      failed_when: false
+
+    - name: Vérifier l'installation
+      shell: |
+        sudo -u odoo psql -d seimp -c "SELECT name, state FROM ir_module_module WHERE name='auth_ldap';"
+      register: module_state
+
+    - name: Afficher état du module
+      debug:
+        msg: "Module auth_ldap: {{ module_state.stdout }}"
+
+    - name: Injecter les paramètres LDAP directement dans la base
+      shell: |
+        sudo -u odoo psql -d seimp <<EOL
+        INSERT INTO ir_config_parameter (key, value) VALUES
+          ('auth_ldap.ldap_server', '192.168.10.10'),
+          ('auth_ldap.ldap_server_port', '389'),
+          ('auth_ldap.ldap_server_base', 'dc=nodomain'),
+          ('auth_ldap.ldap_bind_user', 'cn=admin,dc=nodomain'),
+          ('auth_ldap.ldap_bind_password', 'niang123'),
+          ('auth_ldap.ldap_user_base', 'ou=people,dc=nodomain'),
+          ('auth_ldap.ldap_user_filter', '(&(objectClass=inetOrgPerson)(uid=%s))'),
+          ('auth_ldap.ldap_tls', 'False'),
+          ('auth_ldap.ldap_create_user', 'True')
+        ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;
+        EOL
+
+    - name: Redémarrer Odoo
+      systemd:
+        name: odoo
+        state: restarted
+        daemon_reload: yes
+
+    - name: Attendre qu'Odoo soit prêt
+      wait_for:
+        port: 8069
+        delay: 10
+        timeout: 60
+
+    - name: Tester la connexion LDAP depuis Odoo
+      uri:
+        url: http://localhost:8069/web/session/authenticate
+        method: POST
+        body_format: json
+        body:
+          jsonrpc: "2.0"
+          params:
+            login: "dsulica"
+            password: "elcapo123"
+            db: "seimp"
+        status_code: 200
+      register: auth_test
+      ignore_errors: yes
+
+    - name: Résultat du test
+      debug:
+        msg: "Authentification LDAP: {{ 'OK' if auth_test.status == 200 else 'ÉCHEC' }}"

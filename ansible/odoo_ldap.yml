@@ -1,0 +1,80 @@
+---
+- name: Configurer LDAP dans Odoo
+  hosts: odoo
+  become: yes
+  tasks:
+    - name: Installer le module auth_ldap
+      shell: |
+        sudo -u odoo /opt/odoo/venv/bin/python /opt/odoo/odoo-17/odoo-bin \
+          -c /etc/odoo.conf \
+          -d odoo \
+          -i auth_ldap \
+          --stop-after-init
+      register: ldap_install
+      ignore_errors: yes
+
+    - name: Afficher résultat installation auth_ldap
+      debug:
+        msg: "{{ ldap_install.stdout_lines[-5:] }}"
+
+    - name: Créer script configuration LDAP
+      copy:
+        dest: /tmp/setup_odoo_ldap.py
+        content: |
+          import xmlrpc.client
+
+          url = 'http://localhost:8069'
+          db = 'odoo'
+          username = 'admin'
+          password = 'niang123'
+
+          common = xmlrpc.client.ServerProxy('{}/xmlrpc/2/common'.format(url))
+          uid = common.authenticate(db, username, password, {})
+          if not uid:
+              print("Erreur: impossible de s'authentifier dans Odoo")
+              exit(1)
+
+          models = xmlrpc.client.ServerProxy('{}/xmlrpc/2/object'.format(url))
+
+          existing = models.execute_kw(db, uid, password,
+              'res.company.ldap', 'search', [[]], {'limit': 1})
+
+          ldap_config = {
+              'company': 1,
+              'ldap_server': '192.168.10.10',
+              'ldap_server_port': 389,
+              'ldap_binddn': 'cn=admin,dc=nodomain',
+              'ldap_password': 'niang123',
+              'ldap_filter': '(uid=%s)',
+              'ldap_base': 'ou=people,dc=nodomain',
+              'ldap_tls': False,
+              'create_user': True,
+          }
+
+          if existing:
+              models.execute_kw(db, uid, password,
+                  'res.company.ldap', 'write', [existing, ldap_config])
+              print("Configuration LDAP mise à jour, ID: {}".format(existing[0]))
+          else:
+              new_id = models.execute_kw(db, uid, password,
+                  'res.company.ldap', 'create', [ldap_config])
+              print("Configuration LDAP créée, ID: {}".format(new_id))
+
+    - name: Redémarrer Odoo avant config
+      systemd:
+        name: odoo
+        state: restarted
+
+    - name: Attendre Odoo
+      wait_for:
+        port: 8069
+        delay: 15
+        timeout: 120
+
+    - name: Exécuter le script LDAP
+      command: /opt/odoo/venv/bin/python /tmp/setup_odoo_ldap.py
+      register: ldap_config_result
+
+    - name: Afficher résultat
+      debug:
+        msg: "{{ ldap_config_result.stdout }}"
