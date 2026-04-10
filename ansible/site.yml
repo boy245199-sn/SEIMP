@@ -40,3 +40,10 @@
   roles:
     - wazuh
   tags: siem
+
+- name: Installation du serveur VPN WireGuard
+  hosts: vpn
+  become: yes
+  roles:
+    - wireguard
+  tags: vpn

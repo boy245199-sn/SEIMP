@@ -1,0 +1,191 @@
+---
+- name: Mise à jour des paquets
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+
+- name: Installer WireGuard et dépendances
+  apt:
+    name:
+      - wireguard
+      - wireguard-tools
+      - resolvconf
+      - qrencode
+    state: present
+
+- name: Activer le forwarding IP
+  sysctl:
+    name: net.ipv4.ip_forward
+    value: '1'
+    sysctl_set: yes
+    state: present
+    reload: yes
+
+- name: Créer le répertoire de configuration
+  file:
+    path: /etc/wireguard
+    state: directory
+    mode: 0700
+
+- name: Générer la clé privée du serveur
+  command: wg genkey
+  register: server_private_key
+  changed_when: false
+
+- name: Sauvegarder la clé privée
+  copy:
+    content: "{{ server_private_key.stdout }}"
+    dest: /etc/wireguard/private.key
+    mode: 0600
+
+- name: Générer la clé publique du serveur
+  command: wg pubkey
+  args:
+    stdin: "{{ server_private_key.stdout }}"
+  register: server_public_key
+  changed_when: false
+
+- name: Sauvegarder la clé publique
+  copy:
+    content: "{{ server_public_key.stdout }}"
+    dest: /etc/wireguard/public.key
+    mode: 0644
+
+- name: Créer la configuration WireGuard
+  template:
+    src: wg0.conf.j2
+    dest: /etc/wireguard/wg0.conf
+    mode: 0600
+  notify: restart wireguard
+
+- name: Activer et démarrer WireGuard
+  systemd:
+    name: wg-quick@wg0
+    enabled: yes
+    state: restarted
+    daemon_reload: yes
+
+- name: Créer le script d'ajout de clients
+  copy:
+    dest: /usr/local/bin/add-client.sh
+    mode: 0755
+    content: |
+      #!/bin/bash
+      CLIENT_NAME=$1
+      CLIENT_IP=$2
+      SERVER_PUBLIC_KEY=$(cat /etc/wireguard/public.key)
+      SERVER_ENDPOINT="192.168.10.23:51820"
+      
+      if [ -z "$CLIENT_NAME" ] || [ -z "$CLIENT_IP" ]; then
+          echo "Usage: $0 <nom_client> <dernier_octet>"
+          echo "Exemple: $0 jean 100"
+          exit 1
+      fi
+      
+      CLIENT_DIR="/etc/wireguard/clients/$CLIENT_NAME"
+      mkdir -p $CLIENT_DIR
+      
+      # Générer clés client
+      wg genkey | tee $CLIENT_DIR/private.key | wg pubkey > $CLIENT_DIR/public.key
+      
+      CLIENT_PRIVATE_KEY=$(cat $CLIENT_DIR/private.key)
+      CLIENT_PUBLIC_KEY=$(cat $CLIENT_DIR/public.key)
+      
+      # Config client
+      cat > $CLIENT_DIR/$CLIENT_NAME.conf << EOF
+      [Interface]
+      PrivateKey = $CLIENT_PRIVATE_KEY
+      Address = 10.0.0.$CLIENT_IP/24
+      DNS = 8.8.8.8
+      
+      [Peer]
+      PublicKey = $SERVER_PUBLIC_KEY
+      Endpoint = $SERVER_ENDPOINT
+      AllowedIPs = 0.0.0.0/0
+      PersistentKeepalive = 25
+      EOF
+      
+      # Ajouter peer au serveur
+      echo "[Peer]" >> /etc/wireguard/wg0.conf
+      echo "PublicKey = $CLIENT_PUBLIC_KEY" >> /etc/wireguard/wg0.conf
+      echo "AllowedIPs = 10.0.0.$CLIENT_IP/32" >> /etc/wireguard/wg0.conf
+      
+      # Générer QR code
+      qrencode -t png -o $CLIENT_DIR/$CLIENT_NAME.png < $CLIENT_DIR/$CLIENT_NAME.conf
+      
+      # Redémarrer WireGuard
+      systemctl restart wg-quick@wg0
+      
+      echo "✅ Client $CLIENT_NAME créé !"
+      echo "📁 Config: $CLIENT_DIR/$CLIENT_NAME.conf"
+      echo "📱 QR Code: $CLIENT_DIR/$CLIENT_NAME.png"
+      echo "🌐 IP client: 10.0.0.$CLIENT_IP"
+
+- name: Créer le script de liste des clients
+  copy:
+    dest: /usr/local/bin/list-clients.sh
+    mode: 0755
+    content: |
+      #!/bin/bash
+      echo "=== CLIENTS CONNECTÉS ==="
+      wg show
+      echo ""
+      echo "=== CLIENTS CONFIGURÉS ==="
+      ls -la /etc/wireguard/clients/ 2>/dev/null || echo "Aucun client"
+
+- name: Créer le script de suppression de clients
+  copy:
+    dest: /usr/local/bin/remove-client.sh
+    mode: 0755
+    content: |
+      #!/bin/bash
+      CLIENT_NAME=$1
+      CLIENT_PUBLIC_KEY=$(cat /etc/wireguard/clients/$CLIENT_NAME/public.key)
+      
+      if [ -z "$CLIENT_NAME" ]; then
+          echo "Usage: $0 <nom_client>"
+          exit 1
+      fi
+      
+      # Supprimer du fichier de configuration
+      sed -i "/\[Peer\]/,/AllowedIPs/d" /etc/wireguard/wg0.conf
+      sed -i "/$CLIENT_PUBLIC_KEY/d" /etc/wireguard/wg0.conf
+      
+      # Supprimer le dossier client
+      rm -rf /etc/wireguard/clients/$CLIENT_NAME
+      
+      # Redémarrer WireGuard
+      systemctl restart wg-quick@wg0
+      
+      echo "✅ Client $CLIENT_NAME supprimé !"
+
+- name: Créer le répertoire des clients
+  file:
+    path: /etc/wireguard/clients
+    state: directory
+    mode: 0755
+
+- name: Ouvrir le port firewall
+  ufw:
+    rule: allow
+    port: "51820"
+    proto: udp
+  ignore_errors: yes
+
+- name: Afficher les informations de connexion
+  debug:
+    msg: |
+      ✅ WireGuard installé avec succès !
+      
+      📡 Serveur : 192.168.10.23
+      🔌 Port UDP : 51820
+      🔑 Clé publique serveur : {{ server_public_key.stdout }}
+      
+      📝 Commandes utiles :
+      - Ajouter un client : /usr/local/bin/add-client.sh <nom> <ip>
+      - Supprimer un client : /usr/local/bin/remove-client.sh <nom>
+      - Voir les clients : /usr/local/bin/list-clients.sh
+      - État WireGuard : wg show
+      
+      📱 Clients mobiles : Scanner le QR code généré
+      💻 Clients PC : Importer le fichier .conf
