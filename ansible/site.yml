@@ -47,3 +47,10 @@
   roles:
     - wireguard
   tags: vpn
+
+- name: Installation du serveur Mail (Mailcow)
+  hosts: mail
+  become: yes
+  roles:
+    - mailcow
+  tags: mail

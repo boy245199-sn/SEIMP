@@ -1,0 +1,181 @@
+---
+- name: Mise à jour des paquets
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+
+- name: Installer les dépendances
+  apt:
+    name:
+      - docker.io
+      - docker-compose-v2
+      - git
+      - curl
+      - wget
+      - jq
+      - openssl
+    state: present
+
+- name: Démarrer et activer Docker
+  systemd:
+    name: docker
+    state: started
+    enabled: yes
+
+- name: Ajouter l'utilisateur vagrant au groupe docker
+  user:
+    name: vagrant
+    groups: docker
+    append: yes
+
+- name: Supprimer l'ancien répertoire Mailcow
+  file:
+    path: /opt/mailcow-dockerized
+    state: absent
+
+- name: Cloner Mailcow
+  git:
+    repo: https://github.com/mailcow/mailcow-dockerized.git
+    dest: /opt/mailcow-dockerized
+    depth: 1
+
+- name: Générer les clés DB
+  shell: cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 128 | head -n 1
+  register: dbpass_result
+  changed_when: false
+
+- name: Générer la clé root DB
+  shell: cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 128 | head -n 1
+  register: dbroot_result
+  changed_when: false
+
+- name: Créer mailcow.conf
+  copy:
+    dest: /opt/mailcow-dockerized/mailcow.conf
+    content: |
+      MAILCOW_HOSTNAME=mail.seimp.local
+      HTTP_PORT=8080
+      HTTPS_PORT=8443
+      HTTP_BIND=0.0.0.0
+      HTTPS_BIND=0.0.0.0
+      SMTP_PORT=25
+      SMTPS_PORT=465
+      SUBMISSION_PORT=587
+      IMAP_PORT=143
+      IMAPS_PORT=993
+      POP_PORT=110
+      POPS_PORT=995
+      SIEVE_PORT=4190
+      DOVEADM_PORT=127.0.0.1:19991
+      SQL_PORT=127.0.0.1:13306
+      SOLR_PORT=127.0.0.1:18983
+      REDIS_PORT=127.0.0.1:7654
+      REDISPASS=mailcow123
+      SKIP_LETS_ENCRYPT=y
+      SKIP_CLAMD=y
+      SKIP_SOLR=y
+      SKIP_SOGO=n
+      SKIP_UNBOUND=y
+      TZ=UTC
+      DBNAME=mailcow
+      DBUSER=mailcow
+      DBPASS={{ dbpass_result.stdout }}
+      DBROOT={{ dbroot_result.stdout }}
+      MAILCOW_PASS_SCHEME=BLF-CRYPT
+      ADDITIONAL_SAN=
+      ADDITIONAL_SERVER_NAMES=
+      COMPOSE_PROJECT_NAME=mailcowdockerized
+      ACL_ANYONE=disallow
+      WATCHDOG_NOTIFY_EMAIL=
+      WATCHDOG_SUBJECT=Mailcow watchdog alert
+      WATCHDOG_NOTIFY_BAN=y
+      WATCHDOG_EXTERNAL_CHECKS=n
+      SOGO_EXPIRE_SESSION=480
+      LOG_LINES=9999
+      IPV4_NETWORK=172.22.1
+      IPV6_NETWORK=fd4d:6169:6c63:6f77::/64
+      API_KEY=
+      API_KEY_READ_ONLY=
+      API_ALLOW_FROM=127.0.0.1,::1
+      MAILDIR_GC_TIME=1440
+      OLETOOLS_UPDATE=n
+      MASTER=y
+
+- name: Corriger redis-conf.sh pour REDISPASS vide
+  copy:
+    dest: /opt/mailcow-dockerized/data/conf/redis/redis-conf.sh
+    mode: '0755'
+    content: |
+      #!/bin/sh
+      cat <<REDISCONF > /redis.conf
+      user quota_notify on nopass ~QW_* -@all +get +hget +ping
+      REDISCONF
+      if [ -n "$REDISPASS" ]; then
+        echo "requirepass $REDISPASS" >> /redis.conf
+      fi
+      if [ -n "$REDISMASTERPASS" ]; then
+        echo "masterauth $REDISMASTERPASS" >> /redis.conf
+      fi
+      exec redis-server /redis.conf
+
+- name: Désactiver IPv6 dans docker-compose
+  replace:
+    path: /opt/mailcow-dockerized/docker-compose.yml
+    regexp: 'enable_ipv6:\s*true'
+    replace: 'enable_ipv6: false'
+
+- name: Créer le certificat SSL auto-signé
+  shell: |
+    mkdir -p /opt/mailcow-dockerized/data/assets/ssl
+    openssl req -x509 -newkey rsa:2048 \
+      -keyout /opt/mailcow-dockerized/data/assets/ssl/key.pem \
+      -out /opt/mailcow-dockerized/data/assets/ssl/cert.pem \
+      -days 3650 -nodes \
+      -subj "/CN=mail.seimp.local"
+  args:
+    creates: /opt/mailcow-dockerized/data/assets/ssl/cert.pem
+
+- name: Puller les images avec retries
+  shell: |
+    cd /opt/mailcow-dockerized
+    for i in 1 2 3 4 5; do
+      echo "Tentative $i/5..."
+      docker compose pull && echo "PULL_OK" && break
+      sleep 15
+    done
+  register: pull_result
+  failed_when: "'PULL_OK' not in pull_result.stdout"
+  timeout: 1800
+
+- name: Démarrer Mailcow
+  shell: |
+    cd /opt/mailcow-dockerized
+    docker compose up -d
+
+- name: Attendre que le port 8080 soit disponible
+  wait_for:
+    host: 0.0.0.0
+    port: 8080
+    delay: 20
+    timeout: 300
+
+- name: Ouvrir les ports firewall
+  ufw:
+    rule: allow
+    port: "{{ item }}"
+    proto: tcp
+  loop:
+    - "25"
+    - "143"
+    - "587"
+    - "8080"
+    - "8443"
+  ignore_errors: yes
+
+- name: Afficher les informations
+  debug:
+    msg: |
+      ✅ Mailcow installé !
+      📧 http://192.168.10.30:8080
+      🔒 https://192.168.10.30:8443
+      Identifiants par défaut : admin / moohoo
