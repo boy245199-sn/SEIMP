@@ -1,0 +1,113 @@
+---
+- name: Fix certificat dashboard signé par la CA de l'indexer
+  hosts: siem
+  become: yes
+
+  tasks:
+    - name: Arrêter wazuh-dashboard
+      systemd:
+        name: wazuh-dashboard
+        state: stopped
+
+    - name: Supprimer les anciens certificats dashboard
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/wazuh-dashboard/key.pem
+        - /etc/wazuh-dashboard/cert.pem
+        - /etc/wazuh-dashboard/cert.csr
+
+    - name: Générer la clé du dashboard
+      command: openssl genrsa -out /etc/wazuh-dashboard/key.pem 2048
+
+    - name: Générer le CSR du dashboard
+      command: >
+        openssl req -new
+        -key /etc/wazuh-dashboard/key.pem
+        -out /etc/wazuh-dashboard/cert.csr
+        -subj "/C=FR/ST=Paris/L=Paris/O=Wazuh/CN=192.168.10.22"
+
+    - name: Créer le fichier SAN pour le dashboard
+      copy:
+        dest: /etc/wazuh-dashboard/cert.ext
+        content: |
+          subjectAltName=IP:192.168.10.22,IP:127.0.0.1,DNS:localhost
+
+    - name: Signer le certificat dashboard avec la CA de l'indexer
+      command: >
+        openssl x509 -req -days 3650
+        -in /etc/wazuh-dashboard/cert.csr
+        -CA /etc/wazuh-indexer/certs/ca.pem
+        -CAkey /etc/wazuh-indexer/certs/ca.key
+        -CAcreateserial
+        -out /etc/wazuh-dashboard/cert.pem
+        -extfile /etc/wazuh-dashboard/cert.ext
+
+    - name: Permissions certificats dashboard
+      file:
+        path: "{{ item }}"
+        owner: wazuh-dashboard
+        group: wazuh-dashboard
+        mode: '0640'
+      loop:
+        - /etc/wazuh-dashboard/key.pem
+        - /etc/wazuh-dashboard/cert.pem
+        - /etc/wazuh-dashboard/ca.pem
+
+    - name: Vérifier que cert.pem est bien signé par ca.pem
+      command: openssl verify -CAfile /etc/wazuh-indexer/certs/ca.pem /etc/wazuh-dashboard/cert.pem
+      register: verify_result
+
+    - name: Afficher résultat vérification
+      debug:
+        var: verify_result.stdout
+
+    - name: Configurer opensearch_dashboards.yml
+      copy:
+        dest: /etc/wazuh-dashboard/opensearch_dashboards.yml
+        owner: wazuh-dashboard
+        group: wazuh-dashboard
+        mode: '0660'
+        content: |
+          server.host: 0.0.0.0
+          server.port: 443
+          opensearch.hosts: ["https://localhost:9200"]
+          opensearch.ssl.verificationMode: certificate
+          opensearch.ssl.certificateAuthorities: ["/etc/wazuh-dashboard/ca.pem"]
+          server.ssl.enabled: true
+          server.ssl.key: /etc/wazuh-dashboard/key.pem
+          server.ssl.certificate: /etc/wazuh-dashboard/cert.pem
+          opensearch.username: kibanaserver
+          opensearch.password: wazuh123
+          opensearch_security.multitenancy.enabled: false
+          opensearch_security.readonly_mode.roles: ["kibana_read_only"]
+          logging.silent: false
+
+    - name: Démarrer wazuh-dashboard
+      systemd:
+        name: wazuh-dashboard
+        state: started
+        daemon_reload: yes
+
+    - name: Attendre 90s que le dashboard initialise complètement
+      wait_for:
+        timeout: 90
+
+    - name: Vérifier que le dashboard répond
+      uri:
+        url: https://localhost:443/app/login
+        validate_certs: no
+        status_code: [200, 302]
+      register: dashboard_check
+      retries: 15
+      delay: 15
+      until: dashboard_check.status in [200, 302]
+      ignore_errors: yes
+
+    - name: Résultat final
+      debug:
+        msg: |
+          Vérification cert: {{ verify_result.stdout }}
+          Dashboard status: {{ dashboard_check.status | default('non joignable') }}
+          👉 https://192.168.10.22  —  admin / wazuh123

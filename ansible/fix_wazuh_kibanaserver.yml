@@ -1,0 +1,142 @@
+---
+- name: Fix kibanaserver hash et redémarrage dashboard
+  hosts: siem
+  become: yes
+
+  tasks:
+    - name: Générer le hash bcrypt de wazuh123
+      shell: >
+        /usr/share/wazuh-indexer/plugins/opensearch-security/tools/hash.sh -p wazuh123
+        2>/dev/null | grep '^\$2'
+      register: hashed_password
+      changed_when: false
+      environment:
+        JAVA_HOME: /usr/share/wazuh-indexer/jdk
+        OPENSEARCH_JAVA_HOME: /usr/share/wazuh-indexer/jdk
+        PATH: "/usr/share/wazuh-indexer/jdk/bin:{{ ansible_env.PATH }}"
+
+    - name: Vérifier que le hash n'est pas vide
+      assert:
+        that:
+          - hashed_password.stdout | trim | length > 0
+        fail_msg: "Le hash bcrypt est vide, vérifier le JDK wazuh-indexer"
+
+    - name: Afficher le hash généré
+      debug:
+        msg: "Hash bcrypt: {{ hashed_password.stdout | trim }}"
+
+    - name: Écrire internal_users.yml avec kibanaserver correctement configuré
+      copy:
+        dest: /etc/wazuh-indexer/opensearch-security/internal_users.yml
+        owner: wazuh-indexer
+        group: wazuh-indexer
+        mode: '0660'
+        content: |
+          ---
+          _meta:
+            type: "internalusers"
+            config_version: 2
+
+          admin:
+            hash: "{{ hashed_password.stdout | trim }}"
+            reserved: true
+            backend_roles:
+              - "admin"
+            description: "Admin user"
+
+          kibanaserver:
+            hash: "{{ hashed_password.stdout | trim }}"
+            reserved: true
+            backend_roles:
+              - "kibana_server"
+            opendistro_security_roles:
+              - "kibana_server"
+            description: "Kibana server user"
+
+    - name: Réappliquer la configuration security via securityadmin
+      shell: >
+        /usr/share/wazuh-indexer/plugins/opensearch-security/tools/securityadmin.sh
+        -cd /etc/wazuh-indexer/opensearch-security/
+        -icl -nhnv
+        -cacert /etc/wazuh-indexer/certs/ca.pem
+        -cert /etc/wazuh-indexer/certs/admin.pem
+        -key /etc/wazuh-indexer/certs/admin.key
+        -h 127.0.0.1
+      register: securityadmin_result
+      changed_when: true
+      environment:
+        JAVA_HOME: /usr/share/wazuh-indexer/jdk
+        OPENSEARCH_JAVA_HOME: /usr/share/wazuh-indexer/jdk
+        PATH: "/usr/share/wazuh-indexer/jdk/bin:{{ ansible_env.PATH }}"
+
+    - name: Afficher résultat securityadmin
+      debug:
+        var: securityadmin_result.stdout_lines
+
+    - name: Vérifier que kibanaserver a bien un hash
+      uri:
+        url: https://localhost:9200/_plugins/_security/api/internalusers/kibanaserver
+        method: GET
+        user: admin
+        password: wazuh123
+        validate_certs: no
+        status_code: 200
+      register: kibana_user_check
+
+    - name: Afficher l'état kibanaserver
+      debug:
+        var: kibana_user_check.json
+
+    - name: Mettre à jour opensearch_dashboards.yml
+      copy:
+        dest: /etc/wazuh-dashboard/opensearch_dashboards.yml
+        owner: wazuh-dashboard
+        group: wazuh-dashboard
+        mode: '0660'
+        content: |
+          server.host: 0.0.0.0
+          server.port: 443
+          opensearch.hosts: ["https://localhost:9200"]
+          opensearch.ssl.verificationMode: certificate
+          opensearch.ssl.certificateAuthorities: ["/etc/wazuh-dashboard/ca.pem"]
+          server.ssl.enabled: true
+          server.ssl.key: /etc/wazuh-dashboard/key.pem
+          server.ssl.certificate: /etc/wazuh-dashboard/cert.pem
+          opensearch.username: kibanaserver
+          opensearch.password: wazuh123
+          opensearch_security.multitenancy.enabled: false
+          opensearch_security.readonly_mode.roles: ["kibana_read_only"]
+          logging.silent: false
+
+    - name: Redémarrer wazuh-dashboard
+      systemd:
+        name: wazuh-dashboard
+        state: restarted
+        daemon_reload: yes
+
+    - name: Attendre que le dashboard soit prêt (port 443)
+      wait_for:
+        host: 127.0.0.1
+        port: 443
+        delay: 20
+        timeout: 300
+
+    - name: Vérifier que le dashboard répond
+      uri:
+        url: https://localhost:443
+        validate_certs: no
+        status_code: 200, 302
+      register: dashboard_check
+      retries: 10
+      delay: 10
+      until: dashboard_check.status in [200, 302]
+      ignore_errors: yes
+
+    - name: Résultat final
+      debug:
+        msg: |
+          ✅ Fix appliqué !
+          kibanaserver hash: {{ kibana_user_check.json.kibanaserver.hash | default('VIDE - problème !') }}
+          Dashboard status: {{ dashboard_check.status | default('non joignable') }}
+          👉 Accès: https://192.168.10.22
+          👤 Login: admin / wazuh123

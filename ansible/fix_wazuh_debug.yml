@@ -1,0 +1,66 @@
+---
+- name: Debug dashboard - activer logs verbeux
+  hosts: siem
+  become: yes
+
+  tasks:
+    - name: Activer logging verbose dans opensearch_dashboards.yml
+      copy:
+        dest: /etc/wazuh-dashboard/opensearch_dashboards.yml
+        owner: wazuh-dashboard
+        group: wazuh-dashboard
+        mode: '0660'
+        content: |
+          server.host: 0.0.0.0
+          server.port: 443
+          opensearch.hosts: ["https://localhost:9200"]
+          opensearch.ssl.verificationMode: certificate
+          opensearch.ssl.certificateAuthorities: ["/etc/wazuh-dashboard/ca.pem"]
+          server.ssl.enabled: true
+          server.ssl.key: /etc/wazuh-dashboard/key.pem
+          server.ssl.certificate: /etc/wazuh-dashboard/cert.pem
+          opensearch.username: kibanaserver
+          opensearch.password: wazuh123
+          opensearch_security.multitenancy.enabled: false
+          opensearch_security.readonly_mode.roles: ["kibana_read_only"]
+          logging.silent: false
+          logging.verbose: true
+          logging.dest: /var/log/wazuh-dashboard/dashboard.log
+
+    - name: Créer le dossier de logs dashboard
+      file:
+        path: /var/log/wazuh-dashboard
+        state: directory
+        owner: wazuh-dashboard
+        group: wazuh-dashboard
+        mode: '0755'
+
+    - name: Redémarrer wazuh-dashboard
+      systemd:
+        name: wazuh-dashboard
+        state: restarted
+        daemon_reload: yes
+
+    - name: Attendre 30s
+      wait_for:
+        timeout: 30
+
+    - name: Lire les logs verbeux
+      shell: >
+        grep -i 'error\|warn\|fatal\|migration\|savedobject\|Unable\|refused\|forbidden\|401\|403\|500'
+        /var/log/wazuh-dashboard/dashboard.log 2>/dev/null | head -40
+      register: verbose_logs
+      ignore_errors: yes
+
+    - name: Afficher les logs verbeux
+      debug:
+        var: verbose_logs.stdout_lines
+
+    - name: Lire les premiers logs au démarrage
+      shell: head -80 /var/log/wazuh-dashboard/dashboard.log 2>/dev/null
+      register: startup_logs
+      ignore_errors: yes
+
+    - name: Afficher les logs de démarrage
+      debug:
+        var: startup_logs.stdout_lines

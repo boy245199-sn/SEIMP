@@ -1,0 +1,132 @@
+---
+- name: Fix roles_mapping kibanaserver
+  hosts: siem
+  become: yes
+
+  tasks:
+    - name: Lire le roles_mapping.yml actuel
+      slurp:
+        src: /etc/wazuh-indexer/opensearch-security/roles_mapping.yml
+      register: roles_mapping_raw
+
+    - name: Afficher le contenu actuel
+      debug:
+        msg: "{{ roles_mapping_raw.content | b64decode }}"
+
+    - name: Écrire roles_mapping.yml avec kibanaserver correctement mappé
+      copy:
+        dest: /etc/wazuh-indexer/opensearch-security/roles_mapping.yml
+        owner: wazuh-indexer
+        group: wazuh-indexer
+        mode: '0660'
+        content: |
+          ---
+          _meta:
+            type: "rolesmapping"
+            config_version: 2
+
+          all_access:
+            reserved: false
+            backend_roles:
+              - "admin"
+            description: "Maps admin to all_access"
+
+          own_index:
+            reserved: false
+            users:
+              - "*"
+            description: "Allow full access to an index named like the username"
+
+          kibana_server:
+            reserved: true
+            users:
+              - "kibanaserver"
+            description: "Maps kibanaserver user to kibana_server role"
+
+          kibana_user:
+            reserved: false
+            backend_roles:
+              - "kibanauser"
+            description: "Maps kibanauser to kibana_user"
+
+          logstash:
+            reserved: false
+            backend_roles:
+              - "logstash"
+
+          readall:
+            reserved: false
+            backend_roles:
+              - "readall"
+
+          manage_snapshots:
+            reserved: false
+            backend_roles:
+              - "snapshotrestore"
+
+          security_rest_api_access:
+            reserved: true
+            users:
+              - "admin"
+
+    - name: Réappliquer la configuration security
+      shell: >
+        /usr/share/wazuh-indexer/plugins/opensearch-security/tools/securityadmin.sh
+        -cd /etc/wazuh-indexer/opensearch-security/
+        -icl -nhnv
+        -cacert /etc/wazuh-indexer/certs/ca.pem
+        -cert /etc/wazuh-indexer/certs/admin.pem
+        -key /etc/wazuh-indexer/certs/admin.key
+        -h 127.0.0.1
+      register: securityadmin_result
+      changed_when: true
+      environment:
+        JAVA_HOME: /usr/share/wazuh-indexer/jdk
+        OPENSEARCH_JAVA_HOME: /usr/share/wazuh-indexer/jdk
+        PATH: "/usr/share/wazuh-indexer/jdk/bin:{{ ansible_env.PATH }}"
+
+    - name: Afficher résultat securityadmin
+      debug:
+        var: securityadmin_result.stdout_lines
+
+    - name: Vérifier le mapping kibana_server
+      uri:
+        url: https://localhost:9200/_plugins/_security/api/rolesmapping/kibana_server
+        method: GET
+        user: admin
+        password: wazuh123
+        validate_certs: no
+        status_code: 200
+      register: mapping_check
+
+    - name: Afficher le mapping kibana_server
+      debug:
+        var: mapping_check.json
+
+    - name: Redémarrer wazuh-dashboard
+      systemd:
+        name: wazuh-dashboard
+        state: restarted
+        daemon_reload: yes
+
+    - name: Attendre 60s que le dashboard initialise
+      wait_for:
+        timeout: 60
+
+    - name: Vérifier que le dashboard répond
+      uri:
+        url: https://localhost:443
+        validate_certs: no
+        status_code: [200, 302, 503]
+      register: dashboard_check
+      retries: 15
+      delay: 15
+      until: dashboard_check.status in [200, 302]
+      ignore_errors: yes
+
+    - name: Résultat final
+      debug:
+        msg: |
+          Dashboard status: {{ dashboard_check.status | default('non joignable') }}
+          kibana_server users: {{ mapping_check.json.kibana_server.users | default([]) }}
+          👉 https://192.168.10.22  —  admin / wazuh123

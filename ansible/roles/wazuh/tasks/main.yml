@@ -1,0 +1,308 @@
+---
+- name: Forcer la synchronisation de l'heure
+  shell: |
+    timedatectl set-ntp true 2>/dev/null || true
+    chronyc makestep 2>/dev/null || ntpdate -u pool.ntp.org 2>/dev/null || true
+  changed_when: false
+  ignore_errors: yes
+
+- name: Installer chrony pour la sync NTP
+  apt:
+    name: chrony
+    state: present
+    update_cache: no
+  ignore_errors: yes
+
+- name: Mise à jour des paquets
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+
+- name: Installer les dépendances
+  apt:
+    name:
+      - curl
+      - wget
+      - gnupg
+      - apt-transport-https
+      - software-properties-common
+      - python3-pip
+      - openssl
+      - net-tools
+    state: present
+
+- name: Ajouter la clé GPG Wazuh (méthode moderne)
+  shell: |
+    curl -fsSL https://packages.wazuh.com/key/GPG-KEY-WAZUH | \
+    gpg --dearmor -o /usr/share/keyrings/wazuh.gpg
+  args:
+    creates: /usr/share/keyrings/wazuh.gpg
+
+- name: Ajouter le dépôt Wazuh
+  apt_repository:
+    repo: "deb [signed-by=/usr/share/keyrings/wazuh.gpg] https://packages.wazuh.com/4.x/apt/ stable main"
+    state: present
+    filename: wazuh
+    update_cache: yes
+
+- name: Installer Wazuh manager
+  apt:
+    name: wazuh-manager
+    state: present
+
+- name: Installer Wazuh indexer (OpenSearch)
+  apt:
+    name: wazuh-indexer
+    state: present
+
+- name: Installer Wazuh dashboard
+  apt:
+    name: wazuh-dashboard
+    state: present
+
+- name: Créer le répertoire des certificats
+  file:
+    path: /etc/wazuh-indexer/certs
+    state: directory
+    owner: wazuh-indexer
+    group: wazuh-indexer
+    mode: '0700'
+
+- name: Télécharger wazuh-certs-tool
+  get_url:
+    url: https://packages.wazuh.com/4.7/wazuh-certs-tool.sh
+    dest: /tmp/wazuh-certs-tool.sh
+    mode: '0755'
+
+- name: Créer le fichier de configuration des certificats
+  copy:
+    dest: /tmp/config.yml
+    content: |
+      nodes:
+        indexer:
+          - name: siem
+            ip: 127.0.0.1
+        server:
+          - name: siem
+            ip: 127.0.0.1
+        dashboard:
+          - name: siem
+            ip: 127.0.0.1
+
+- name: Générer les certificats Wazuh
+  shell: |
+    cd /tmp
+    bash /tmp/wazuh-certs-tool.sh -A
+  args:
+    creates: /tmp/wazuh-certificates/root-ca.pem
+
+- name: Copier les certificats indexer
+  shell: |
+    cp /tmp/wazuh-certificates/root-ca.pem      /etc/wazuh-indexer/certs/root-ca.pem
+    cp /tmp/wazuh-certificates/siem.pem          /etc/wazuh-indexer/certs/indexer.pem
+    cp /tmp/wazuh-certificates/siem-key.pem      /etc/wazuh-indexer/certs/indexer-key.pem
+    cp /tmp/wazuh-certificates/admin.pem         /etc/wazuh-indexer/certs/admin.pem
+    cp /tmp/wazuh-certificates/admin-key.pem     /etc/wazuh-indexer/certs/admin-key.pem
+    chmod 500 /etc/wazuh-indexer/certs
+    chmod 400 /etc/wazuh-indexer/certs/*
+    chown -R wazuh-indexer:wazuh-indexer /etc/wazuh-indexer/certs
+  args:
+    creates: /etc/wazuh-indexer/certs/admin.pem
+
+- name: Configurer opensearch.yml
+  copy:
+    dest: /etc/wazuh-indexer/opensearch.yml
+    content: |
+      network.host: 127.0.0.1
+      node.name: siem
+      cluster.initial_master_nodes:
+        - siem
+      plugins.security.ssl.http.pemcert_filepath: /etc/wazuh-indexer/certs/indexer.pem
+      plugins.security.ssl.http.pemkey_filepath: /etc/wazuh-indexer/certs/indexer-key.pem
+      plugins.security.ssl.http.pemtrustedcas_filepath: /etc/wazuh-indexer/certs/root-ca.pem
+      plugins.security.ssl.transport.pemcert_filepath: /etc/wazuh-indexer/certs/indexer.pem
+      plugins.security.ssl.transport.pemkey_filepath: /etc/wazuh-indexer/certs/indexer-key.pem
+      plugins.security.ssl.transport.pemtrustedcas_filepath: /etc/wazuh-indexer/certs/root-ca.pem
+      plugins.security.ssl.http.enabled: true
+      plugins.security.ssl.transport.enforce_hostname_verification: false
+      plugins.security.allow_unsafe_democertificates: false
+      plugins.security.allow_default_init_securityindex: true
+      plugins.security.authcz.admin_dn:
+        - CN=admin,OU=Wazuh,O=Wazuh,L=California,C=US
+      plugins.security.nodes_dn:
+        - CN=siem,OU=Wazuh,O=Wazuh,L=California,C=US
+
+- name: Démarrer et activer wazuh-indexer
+  systemd:
+    name: wazuh-indexer
+    state: restarted
+    enabled: yes
+
+- name: Attendre que l'indexer soit prêt (port 9200)
+  wait_for:
+    port: 9200
+    host: 127.0.0.1
+    delay: 30
+    timeout: 300
+
+- name: Initialiser la sécurité OpenSearch avec les bons certificats
+  shell: |
+    JAVA_HOME="/usr/share/wazuh-indexer/jdk" \
+    runuser wazuh-indexer --shell="/bin/bash" --command=" \
+      /usr/share/wazuh-indexer/plugins/opensearch-security/tools/securityadmin.sh \
+      -cd /etc/wazuh-indexer/opensearch-security \
+      -cacert /etc/wazuh-indexer/certs/root-ca.pem \
+      -cert /etc/wazuh-indexer/certs/admin.pem \
+      -key /etc/wazuh-indexer/certs/admin-key.pem \
+      -h 127.0.0.1 -p 9200 -icl -nhnv"
+  register: security_init
+  retries: 3
+  delay: 15
+  until: security_init.rc == 0
+
+- name: Attendre 20s que la sécurité soit opérationnelle
+  pause:
+    seconds: 20
+
+- name: Diagnostiquer la réponse de l'API avant changement de mot de passe
+  shell: |
+    curl -s \
+      --cacert /etc/wazuh-indexer/certs/root-ca.pem \
+      --cert /etc/wazuh-indexer/certs/admin.pem \
+      --key /etc/wazuh-indexer/certs/admin-key.pem \
+      -u admin:admin \
+      https://127.0.0.1:9200/_plugins/_security/api/internalusers/admin
+  register: diag_result
+  changed_when: false
+  ignore_errors: yes
+
+- name: Afficher le diagnostic
+  debug:
+    msg: "{{ diag_result.stdout }}"
+
+- name: Changer le mot de passe via securityadmin (méthode fichier YAML)
+  shell: |
+    # Récupérer le hash bcrypt actuel et créer un nouveau hash pour niang123
+    HASH=$(JAVA_HOME=/usr/share/wazuh-indexer/jdk \
+      /usr/share/wazuh-indexer/plugins/opensearch-security/tools/hash.sh -p niang123 2>/dev/null | tail -1)
+
+    echo "Hash généré: $HASH"
+
+    # Modifier directement le fichier internal_users.yml
+    python3 -c "
+    import yaml, sys
+
+    with open('/etc/wazuh-indexer/opensearch-security/internal_users.yml', 'r') as f:
+        data = yaml.safe_load(f)
+
+    if 'admin' not in data:
+        data['admin'] = {}
+
+    data['admin']['hash'] = sys.argv[1]
+    data['admin']['reserved'] = True
+    data['admin']['backend_roles'] = ['admin']
+    data['admin']['description'] = 'Admin user'
+
+    with open('/etc/wazuh-indexer/opensearch-security/internal_users.yml', 'w') as f:
+        yaml.dump(data, f, default_flow_style=False)
+
+    print('Fichier mis à jour avec succès')
+    " "$HASH"
+  register: hash_result
+  changed_when: true
+
+- name: Afficher le résultat du hash
+  debug:
+    msg: "{{ hash_result.stdout }}"
+
+- name: Réappliquer la configuration de sécurité avec le nouveau mot de passe
+  shell: |
+    JAVA_HOME="/usr/share/wazuh-indexer/jdk" \
+    runuser wazuh-indexer --shell="/bin/bash" --command=" \
+      /usr/share/wazuh-indexer/plugins/opensearch-security/tools/securityadmin.sh \
+      -f /etc/wazuh-indexer/opensearch-security/internal_users.yml \
+      -t internalusers \
+      -cacert /etc/wazuh-indexer/certs/root-ca.pem \
+      -cert /etc/wazuh-indexer/certs/admin.pem \
+      -key /etc/wazuh-indexer/certs/admin-key.pem \
+      -h 127.0.0.1 -p 9200 -icl -nhnv"
+  register: reapply_result
+  retries: 3
+  delay: 10
+  until: reapply_result.rc == 0
+
+- name: Afficher le résultat de la réapplication
+  debug:
+    msg: "{{ reapply_result.stdout_lines[-5:] }}"
+
+- name: Vérifier que le nouveau mot de passe fonctionne
+  shell: |
+    curl -s -o /dev/null -w "%{http_code}" \
+      --cacert /etc/wazuh-indexer/certs/root-ca.pem \
+      -u admin:niang123 \
+      https://127.0.0.1:9200/_cluster/health
+  register: verify_result
+  retries: 3
+  delay: 5
+  until: verify_result.stdout == "200"
+  changed_when: false
+
+- name: Confirmer que le mot de passe niang123 est actif
+  debug:
+    msg: "Mot de passe niang123 confirmé actif (HTTP {{ verify_result.stdout }})"
+
+- name: Démarrer et activer wazuh-manager
+  systemd:
+    name: wazuh-manager
+    state: started
+    enabled: yes
+
+- name: Copier les certificats pour le dashboard
+  shell: |
+    mkdir -p /etc/wazuh-dashboard/certs
+    cp /tmp/wazuh-certificates/root-ca.pem      /etc/wazuh-dashboard/certs/root-ca.pem
+    cp /tmp/wazuh-certificates/siem.pem          /etc/wazuh-dashboard/certs/dashboard.pem
+    cp /tmp/wazuh-certificates/siem-key.pem      /etc/wazuh-dashboard/certs/dashboard-key.pem
+    chmod 500 /etc/wazuh-dashboard/certs
+    chmod 400 /etc/wazuh-dashboard/certs/*
+    chown -R wazuh-dashboard:wazuh-dashboard /etc/wazuh-dashboard/certs
+  args:
+    creates: /etc/wazuh-dashboard/certs/dashboard.pem
+
+- name: Désactiver SSL dans le dashboard (accès HTTP)
+  replace:
+    path: /etc/wazuh-dashboard/opensearch_dashboards.yml
+    regexp: 'server\.ssl\.enabled:.*'
+    replace: 'server.ssl.enabled: false'
+
+- name: Configurer l'URL de l'indexer dans le dashboard
+  lineinfile:
+    path: /etc/wazuh-dashboard/opensearch_dashboards.yml
+    regexp: 'opensearch\.hosts:'
+    line: 'opensearch.hosts: ["https://127.0.0.1:9200"]'
+
+- name: Configurer le username dashboard
+  lineinfile:
+    path: /etc/wazuh-dashboard/opensearch_dashboards.yml
+    regexp: 'opensearch\.username:'
+    line: 'opensearch.username: "admin"'
+
+- name: Configurer le mot de passe dashboard
+  lineinfile:
+    path: /etc/wazuh-dashboard/opensearch_dashboards.yml
+    regexp: 'opensearch\.password:'
+    line: 'opensearch.password: "niang123"'
+
+- name: Démarrer et activer wazuh-dashboard
+  systemd:
+    name: wazuh-dashboard
+    state: started
+    enabled: yes
+
+- name: Attendre que le dashboard soit accessible (port 443)
+  wait_for:
+    port: 443
+    host: 127.0.0.1
+    delay: 20
+    timeout: 180
+  ignore_errors: yes

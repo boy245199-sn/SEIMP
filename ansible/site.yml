@@ -33,3 +33,10 @@
   roles:
     - backup
   tags: backup
+
+- name: Installation du serveur SIEM Wazuh
+  hosts: siem
+  become: yes
+  roles:
+    - wazuh
+  tags: siem
