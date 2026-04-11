@@ -1,0 +1,133 @@
+---
+- name: Mise à jour des paquets
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+
+- name: Installer les dépendances
+  apt:
+    name:
+      - docker.io
+      - curl
+      - wget
+      - python3-pip
+    state: present
+
+- name: Installer Docker Compose v2 (plugin)
+  shell: |
+    mkdir -p /usr/local/lib/docker/cli-plugins
+    curl -SL https://github.com/docker/compose/releases/latest/download/docker-compose-linux-x86_64 -o /usr/local/lib/docker/cli-plugins/docker-compose
+    chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+  args:
+    creates: /usr/local/lib/docker/cli-plugins/docker-compose
+
+- name: Démarrer Docker
+  systemd:
+    name: docker
+    state: started
+    enabled: yes
+
+- name: Ajouter l'utilisateur vagrant au groupe docker
+  user:
+    name: vagrant
+    groups: docker
+    append: yes
+
+- name: Arrêter et supprimer les anciens conteneurs OnlyOffice
+  shell: |
+    cd /opt/onlyoffice 2>/dev/null && docker compose down -v 2>/dev/null || true
+    docker rm -f onlyoffice-document-server 2>/dev/null || true
+    docker rm -f 1917340ce613_onlyoffice-document-server 2>/dev/null || true
+  ignore_errors: yes
+
+- name: Créer le répertoire OnlyOffice
+  file:
+    path: /opt/onlyoffice
+    state: directory
+    mode: 0755
+
+- name: Créer le fichier docker-compose.yml
+  copy:
+    dest: /opt/onlyoffice/docker-compose.yml
+    content: |
+      services:
+        onlyoffice-document-server:
+          image: onlyoffice/documentserver:latest
+          container_name: onlyoffice-document-server
+          restart: always
+          ports:
+            - "80:80"
+            - "443:443"
+          environment:
+            - JWT_ENABLED=true
+            - JWT_SECRET=niang123
+          volumes:
+            - /opt/onlyoffice/data:/var/www/onlyoffice/Data
+            - /opt/onlyoffice/logs:/var/log/onlyoffice
+            - /opt/onlyoffice/lib:/var/lib/onlyoffice
+            - /opt/onlyoffice/db:/var/lib/postgresql
+
+- name: Démarrer OnlyOffice
+  shell: |
+    cd /opt/onlyoffice
+    docker compose up -d
+  register: onlyoffice_start
+  async: 7200
+  poll: 60
+
+- name: Attendre que le service soit prêt sur le port 80
+  wait_for:
+    port: 80
+    delay: 10
+    timeout: 600
+  ignore_errors: yes
+
+- name: Attendre que le service soit prêt sur le port 443
+  wait_for:
+    port: 443
+    delay: 5
+    timeout: 600
+  ignore_errors: yes
+
+- name: Ouvrir les ports dans le firewall
+  ufw:
+    rule: allow
+    port: "{{ item }}"
+    proto: tcp
+  loop:
+    - 80
+    - 443
+  ignore_errors: yes
+
+- name: Vérifier l'état des conteneurs
+  shell: |
+    cd /opt/onlyoffice
+    docker compose ps
+  register: containers_status
+
+- name: Vérifier les logs
+  shell: |
+    cd /opt/onlyoffice
+    docker compose logs --tail=30
+  register: container_logs
+  ignore_errors: yes
+
+- name: Afficher les informations finales
+  debug:
+    msg: |
+      ✅ OnlyOffice Document Server installé !
+      
+      🌐 Accès : http://192.168.10.31
+      
+      🔐 JWT Secret : niang123
+      
+      📝 Intégration Nextcloud :
+      - Installer l'application "ONLYOFFICE" dans Nextcloud
+      - Configurer : http://192.168.10.31
+      - JWT Secret : niang123
+      
+      📊 État des conteneurs :
+      {{ containers_status.stdout }}
+      
+      📋 Derniers logs :
+      {{ container_logs.stdout }}

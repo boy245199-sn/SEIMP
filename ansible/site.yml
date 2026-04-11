@@ -54,3 +54,10 @@
   roles:
     - mailcow
   tags: mail
+
+- name: Installation de OnlyOffice Community Server
+  hosts: office
+  become: yes
+  roles:
+    - onlyoffice
+  tags: office
