@@ -61,3 +61,10 @@
   roles:
     - onlyoffice
   tags: office
+
+- name: Installation du Wiki BookStack
+  hosts: wiki
+  become: yes
+  roles:
+    - bookstack
+  tags: wiki

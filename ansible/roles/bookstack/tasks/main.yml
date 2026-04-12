@@ -1,0 +1,197 @@
+---
+- name: Mise à jour des paquets
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+
+- name: Installer les dépendances
+  apt:
+    name:
+      - apache2
+      - mariadb-server
+      - mariadb-client
+      - php8.1
+      - php8.1-cli
+      - php8.1-common
+      - php8.1-mbstring
+      - php8.1-xml
+      - php8.1-curl
+      - php8.1-zip
+      - php8.1-gd
+      - php8.1-mysql
+      - php8.1-tidy
+      - libapache2-mod-php8.1
+      - unzip
+      - curl
+      - wget
+    state: present
+
+- name: Démarrer MariaDB
+  systemd:
+    name: mariadb
+    state: started
+    enabled: yes
+
+- name: Créer la base de données
+  shell: |
+    mysql -e "CREATE DATABASE IF NOT EXISTS bookstack CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+    mysql -e "CREATE USER IF NOT EXISTS 'bookstack'@'localhost' IDENTIFIED BY 'bookstack123';"
+    mysql -e "GRANT ALL PRIVILEGES ON bookstack.* TO 'bookstack'@'localhost';"
+    mysql -e "FLUSH PRIVILEGES;"
+  ignore_errors: yes
+
+- name: Installer Composer
+  shell: |
+    php -r "copy('https://getcomposer.org/installer', '/tmp/composer-setup.php');"
+    php /tmp/composer-setup.php --install-dir=/usr/local/bin --filename=composer
+    php -r "unlink('/tmp/composer-setup.php');"
+  args:
+    creates: /usr/local/bin/composer
+
+- name: Supprimer l'ancien répertoire
+  file:
+    path: /var/www/bookstack
+    state: absent
+
+- name: Télécharger BookStack en ZIP
+  get_url:
+    url: https://github.com/BookStackApp/BookStack/archive/refs/tags/v24.10.2.zip
+    dest: /tmp/bookstack.zip
+    timeout: 180
+
+- name: Décompresser BookStack
+  unarchive:
+    src: /tmp/bookstack.zip
+    dest: /var/www/
+    remote_src: yes
+    owner: www-data
+    group: www-data
+
+- name: Renommer le répertoire
+  command: mv /var/www/BookStack-24.10.2 /var/www/bookstack
+  args:
+    creates: /var/www/bookstack
+
+- name: Installer les dépendances PHP via Composer
+  shell: |
+    cd /var/www/bookstack
+    COMPOSER_PROCESS_TIMEOUT=300 composer install --no-dev --no-interaction --optimize-autoloader
+  environment:
+    COMPOSER_HOME: /tmp/composer_home
+  args:
+    creates: /var/www/bookstack/vendor/autoload.php
+  async: 600
+  poll: 30
+
+- name: Créer le fichier .env
+  copy:
+    dest: /var/www/bookstack/.env
+    content: |
+      APP_ENV=production
+      APP_DEBUG=false
+      APP_URL=http://192.168.10.32
+      APP_KEY=
+      DB_HOST=localhost
+      DB_DATABASE=bookstack
+      DB_USERNAME=bookstack
+      DB_PASSWORD=bookstack123
+      CACHE_DRIVER=file
+      SESSION_DRIVER=file
+      QUEUE_CONNECTION=sync
+
+- name: Générer APP_KEY Laravel
+  shell: |
+    cd /var/www/bookstack && php artisan key:generate --force
+
+- name: Créer les répertoires storage
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: www-data
+    group: www-data
+    mode: 0775
+  loop:
+    - /var/www/bookstack/storage/logs
+    - /var/www/bookstack/storage/framework/cache
+    - /var/www/bookstack/storage/framework/sessions
+    - /var/www/bookstack/storage/framework/views
+    - /var/www/bookstack/bootstrap/cache
+
+- name: Configurer les permissions avant migration
+  shell: |
+    chown -R www-data:www-data /var/www/bookstack
+    chmod -R 755 /var/www/bookstack
+    chmod -R 775 /var/www/bookstack/storage
+    chmod -R 775 /var/www/bookstack/bootstrap/cache
+
+- name: Migrer la base
+  shell: |
+    cd /var/www/bookstack && sudo -u www-data php artisan migrate --force
+
+- name: Vider le cache Laravel
+  shell: |
+    cd /var/www/bookstack
+    sudo -u www-data php artisan cache:clear
+    sudo -u www-data php artisan config:clear
+    sudo -u www-data php artisan view:clear
+
+- name: Configurer Apache
+  copy:
+    dest: /etc/apache2/sites-available/bookstack.conf
+    content: |
+      <VirtualHost *:80>
+          ServerName 192.168.10.32
+          DocumentRoot /var/www/bookstack/public
+          <Directory /var/www/bookstack/public>
+              Options -Indexes +FollowSymLinks
+              AllowOverride All
+              Require all granted
+          </Directory>
+          ErrorLog ${APACHE_LOG_DIR}/bookstack_error.log
+          CustomLog ${APACHE_LOG_DIR}/bookstack_access.log combined
+      </VirtualHost>
+
+- name: Activer le site
+  command: a2ensite bookstack.conf
+  notify: restart apache2
+
+- name: Désactiver le site par défaut
+  command: a2dissite 000-default.conf
+  ignore_errors: yes
+  notify: restart apache2
+
+- name: Activer mod_rewrite
+  command: a2enmod rewrite
+  notify: restart apache2
+
+- name: Permissions finales
+  shell: |
+    chown -R www-data:www-data /var/www/bookstack
+    chmod -R 755 /var/www/bookstack
+    chmod -R 775 /var/www/bookstack/storage
+    chmod -R 775 /var/www/bookstack/bootstrap/cache
+
+- name: Redémarrer Apache
+  systemd:
+    name: apache2
+    state: restarted
+    enabled: yes
+
+- name: Vérifier que BookStack répond
+  uri:
+    url: http://192.168.10.32
+    status_code: 200
+    timeout: 30
+  register: result
+  until: result.status == 200
+  retries: 10
+  delay: 5
+
+- name: Afficher les informations
+  debug:
+    msg: |
+      ✅ BookStack installé avec succès !
+
+      🌐 URL : http://192.168.10.32
+      👤 Login : admin@admin.com
+      🔑 Mot de passe : password
