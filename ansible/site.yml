@@ -68,3 +68,15 @@
   roles:
     - bookstack
   tags: wiki
+
+- name: Installation de Nginx Proxy Manager
+  hosts: npm
+  become: yes
+  roles:
+    - nginx-proxy-manager
+
+- name: Installation de Jitsi Meet
+  hosts: jitsi
+  become: yes
+  roles:
+    - jitsi

@@ -1,0 +1,15 @@
+---
+- name: restart jitsi-videobridge2
+  systemd:
+    name: jitsi-videobridge2
+    state: restarted
+
+- name: restart jicofo
+  systemd:
+    name: jicofo
+    state: restarted
+
+- name: restart prosody
+  systemd:
+    name: prosody
+    state: restarted

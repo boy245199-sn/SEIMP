@@ -1,0 +1,143 @@
+---
+- name: Mise à jour des paquets
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+
+- name: Installer les dépendances
+  apt:
+    name:
+      - curl
+      - wget
+      - gnupg2
+      - ca-certificates
+      - apt-transport-https
+      - software-properties-common
+      - python3-pip
+    state: present
+
+- name: Installer Docker GPG key
+  shell: |
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+  args:
+    creates: /usr/share/keyrings/docker-archive-keyring.gpg
+
+- name: Ajouter le dépôt Docker
+  shell: |
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" > /etc/apt/sources.list.d/docker.list
+  args:
+    creates: /etc/apt/sources.list.d/docker.list
+
+- name: Installer Docker
+  apt:
+    name:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+      - docker-compose-plugin
+    update_cache: yes
+    state: present
+
+- name: Démarrer Docker
+  systemd:
+    name: docker
+    state: started
+    enabled: yes
+
+- name: Créer le répertoire NPM
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: 0755
+  loop:
+    - /opt/npm
+    - /opt/npm/data
+    - /opt/npm/letsencrypt
+    - /opt/npm/db
+
+- name: Créer le fichier docker-compose
+  copy:
+    dest: /opt/npm/docker-compose.yml
+    content: |
+      version: '3.8'
+      services:
+        app:
+          image: 'jc21/nginx-proxy-manager:latest'
+          container_name: nginx-proxy-manager
+          restart: unless-stopped
+          ports:
+            - '80:80'
+            - '443:443'
+            - '81:81'
+          environment:
+            DB_MYSQL_HOST: "db"
+            DB_MYSQL_PORT: 3306
+            DB_MYSQL_USER: "npm"
+            DB_MYSQL_PASSWORD: "npm123"
+            DB_MYSQL_NAME: "npm"
+          volumes:
+            - /opt/npm/data:/data
+            - /opt/npm/letsencrypt:/etc/letsencrypt
+          depends_on:
+            - db
+          networks:
+            - npm_network
+
+        db:
+          image: 'jc21/mariadb-aria:latest'
+          container_name: npm-db
+          restart: unless-stopped
+          environment:
+            MYSQL_ROOT_PASSWORD: "root123"
+            MYSQL_DATABASE: "npm"
+            MYSQL_USER: "npm"
+            MYSQL_PASSWORD: "npm123"
+          volumes:
+            - /opt/npm/db:/var/lib/mysql
+          networks:
+            - npm_network
+
+      networks:
+        npm_network:
+          driver: bridge
+
+- name: Lancer Nginx Proxy Manager
+  shell: |
+    cd /opt/npm && docker compose up -d
+  args:
+    creates: /opt/npm/data/nginx
+
+- name: Attendre que NPM démarre (30s)
+  wait_for:
+    port: 81
+    host: 192.168.10.33
+    delay: 15
+    timeout: 120
+
+- name: Vérifier que NPM répond
+  uri:
+    url: http://192.168.10.33:81
+    status_code: 200
+    timeout: 30
+  register: result
+  until: result.status == 200
+  retries: 10
+  delay: 10
+
+- name: Afficher les informations
+  debug:
+    msg: |
+      ✅ Nginx Proxy Manager installé avec succès !
+
+      🌐 Interface admin : http://192.168.10.33:81
+      👤 Login          : admin@example.com
+      🔑 Mot de passe   : changeme
+
+      ⚠️  Change le mot de passe à la première connexion !
+
+      Ports ouverts :
+        - 80  → HTTP (proxy)
+        - 443 → HTTPS (proxy)
+        - 81  → Interface d'administration

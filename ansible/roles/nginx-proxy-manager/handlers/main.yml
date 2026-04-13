@@ -1,0 +1,5 @@
+---
+- name: restart nginx-proxy-manager
+  systemd:
+    name: npm
+    state: restarted

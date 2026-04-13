@@ -2,7 +2,7 @@ Vagrant.configure("2") do |config|
   config.vm.boot_timeout = 6000
   config.vm.box = "ubuntu/jammy64"  # Ubuntu 22.04
 
-    machines = {
+      machines = {
   "ldap"          => { ip: "192.168.10.10", memory: 1024, cpus: 1 },
   "nextcloud"     => { ip: "192.168.10.11", memory: 2048, cpus: 2 },
   "odoo"          => { ip: "192.168.10.12", memory: 2048, cpus: 2 },
@@ -13,7 +13,11 @@ Vagrant.configure("2") do |config|
   "vpn"           => { ip: "192.168.10.23", memory: 1024, cpus: 1 },
   "mail"          => { ip: "192.168.10.30", memory: 4096, cpus: 2 },
   "office"        => { ip: "192.168.10.31", memory: 2048, cpus: 2 },
-  "wiki"          => { ip: "192.168.10.32", memory: 1024, cpus: 1 }
+  "wiki"          => { ip: "192.168.10.32", memory: 1024, cpus: 1 },
+  "npm"           => { ip: "192.168.10.33", memory: 1024, cpus: 1 },
+  "vaultwarden"   => { ip: "192.168.10.34", memory: 512,  cpus: 1 },
+  "jitsi"         => { ip: "192.168.10.35", memory: 4096, cpus: 2 },
+  "zammad"        => { ip: "192.168.10.36", memory: 2048, cpus: 2 }
  }
   machines.each do |name, opts|
     config.vm.define name do |node|

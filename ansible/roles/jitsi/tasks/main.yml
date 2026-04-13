@@ -1,0 +1,142 @@
+---
+- name: Mise à jour des paquets
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+
+- name: Installer les dépendances
+  apt:
+    name:
+      - curl
+      - wget
+      - gnupg2
+      - apt-transport-https
+      - ca-certificates
+      - debconf-utils
+    state: present
+
+- name: Ajouter le dépôt Jitsi
+  shell: |
+    curl -fsSL https://download.jitsi.org/jitsi-key.gpg.key | gpg --dearmor -o /usr/share/keyrings/jitsi-keyring.gpg
+    echo "deb [signed-by=/usr/share/keyrings/jitsi-keyring.gpg] https://download.jitsi.org stable/" > /etc/apt/sources.list.d/jitsi-stable.list
+  args:
+    creates: /etc/apt/sources.list.d/jitsi-stable.list
+
+- name: Mise à jour après ajout du dépôt Jitsi
+  apt:
+    update_cache: yes
+
+- name: Pré-configurer le hostname Jitsi
+  debconf:
+    name: jitsi-meet
+    question: jitsi-meet/jvb-hostname
+    value: "jitsi.seimp.local"
+    vtype: string
+
+- name: Pré-configurer le certificat SSL (auto-signé)
+  debconf:
+    name: jitsi-meet
+    question: jitsi-meet/cert-choice
+    value: "Generate a new self-signed certificate"
+    vtype: select
+
+- name: Définir le hostname système
+  hostname:
+    name: jitsi.seimp.local
+
+- name: Ajouter jitsi.seimp.local dans /etc/hosts
+  lineinfile:
+    path: /etc/hosts
+    line: "192.168.10.35 jitsi.seimp.local jitsi"
+    state: present
+
+- name: Installer Jitsi Meet
+  apt:
+    name:
+      - jitsi-meet
+    state: present
+    update_cache: no
+  environment:
+    DEBIAN_FRONTEND: noninteractive
+
+- name: Activer l'authentification sur Prosody
+  blockinfile:
+    path: /etc/prosody/conf.avail/jitsi.seimp.local.cfg.lua
+    marker: "-- {mark} ANSIBLE MANAGED BLOCK"
+    insertafter: "VirtualHost \"jitsi.seimp.local\""
+    block: |
+      authentication = "internal_hashed"
+
+- name: Ajouter le domaine guest dans Prosody
+  blockinfile:
+    path: /etc/prosody/conf.avail/jitsi.seimp.local.cfg.lua
+    marker: "-- {mark} ANSIBLE GUEST BLOCK"
+    insertafter: EOF
+    block: |
+      VirtualHost "guest.jitsi.seimp.local"
+          authentication = "anonymous"
+          c2s_require_encryption = false
+
+- name: Configurer Jicofo pour l'auth
+  lineinfile:
+    path: /etc/jitsi/jicofo/jicofo.conf
+    regexp: ".*authentication.*"
+    line: |
+      jicofo {
+        authentication {
+          enabled = true
+          type = XMPP
+          login-url = jitsi.seimp.local
+        }
+      }
+    state: present
+  ignore_errors: yes
+
+- name: Configurer le domaine anonyme dans meet config
+  lineinfile:
+    path: /etc/jitsi/meet/jitsi.seimp.local-config.js
+    regexp: ".*anonymousdomain.*"
+    line: "    anonymousdomain: 'guest.jitsi.seimp.local',"
+    state: present
+  ignore_errors: yes
+
+- name: Créer l'utilisateur admin Jitsi
+  shell: |
+    prosodyctl register admin jitsi.seimp.local admin123
+  ignore_errors: yes
+
+- name: Démarrer les services Jitsi
+  systemd:
+    name: "{{ item }}"
+    state: restarted
+    enabled: yes
+  loop:
+    - prosody
+    - jicofo
+    - jitsi-videobridge2
+
+- name: Vérifier que Jitsi répond
+  uri:
+    url: https://192.168.10.35
+    status_code: 200
+    validate_certs: no
+    timeout: 30
+  register: result
+  until: result.status == 200
+  retries: 10
+  delay: 10
+
+- name: Afficher les informations
+  debug:
+    msg: |
+      ✅ Jitsi Meet installé avec succès !
+
+      🌐 URL         : https://192.168.10.35
+      👤 Admin       : admin
+      🔑 Mot de passe: admin123
+
+      ⚠️  Ajoute dans ton fichier hosts Windows :
+          192.168.10.35  jitsi.seimp.local
+
+      Pour créer d'autres utilisateurs :
+        vagrant ssh jitsi -c "sudo prosodyctl register <user> jitsi.seimp.local <password>"
