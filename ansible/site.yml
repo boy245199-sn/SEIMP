@@ -80,3 +80,9 @@
   become: yes
   roles:
     - jitsi
+
+- name: Installation de Jitsi Meet
+  hosts: jitsi
+  become: yes
+  roles:
+    - jitsi
