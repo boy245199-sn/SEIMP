@@ -1,0 +1,183 @@
+---
+- name: Mise à jour des paquets
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+
+- name: Installer les dépendances
+  apt:
+    name:
+      - curl
+      - wget
+      - gnupg2
+      - apt-transport-https
+      - ca-certificates
+      - software-properties-common
+      - nginx
+      - openssl
+    state: present
+
+- name: Installer Docker GPG key
+  shell: |
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+  args:
+    creates: /usr/share/keyrings/docker-archive-keyring.gpg
+
+- name: Ajouter le dépôt Docker
+  shell: |
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" > /etc/apt/sources.list.d/docker.list
+  args:
+    creates: /etc/apt/sources.list.d/docker.list
+
+- name: Installer Docker
+  apt:
+    name:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+      - docker-compose-plugin
+    update_cache: yes
+    state: present
+
+- name: Démarrer Docker
+  systemd:
+    name: docker
+    state: started
+    enabled: yes
+
+- name: Créer les répertoires Vaultwarden
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: 0755
+  loop:
+    - /opt/vaultwarden
+    - /opt/vaultwarden/data
+
+- name: Créer le fichier docker-compose
+  copy:
+    dest: /opt/vaultwarden/docker-compose.yml
+    content: |
+      services:
+        vaultwarden:
+          image: vaultwarden/server:latest
+          container_name: vaultwarden
+          restart: unless-stopped
+          ports:
+            - '127.0.0.1:8080:80'
+          environment:
+            DOMAIN: "https://192.168.10.34"
+            SIGNUPS_ALLOWED: "true"
+            ADMIN_TOKEN: "vaultwardenadmin123"
+            LOG_LEVEL: "warn"
+            WEBSOCKET_ENABLED: "true"
+          volumes:
+            - /opt/vaultwarden/data:/data
+
+- name: Lancer Vaultwarden
+  shell: |
+    cd /opt/vaultwarden && docker compose up -d
+
+- name: Attendre que Vaultwarden démarre
+  wait_for:
+    port: 8080
+    host: 127.0.0.1
+    delay: 20
+    timeout: 180
+
+- name: Générer le certificat SSL auto-signé
+  shell: |
+    openssl req -x509 -nodes -days 3650 -newkey rsa:2048 \
+      -keyout /etc/ssl/private/vaultwarden.key \
+      -out /etc/ssl/certs/vaultwarden.crt \
+      -subj "/CN=192.168.10.34"
+  args:
+    creates: /etc/ssl/certs/vaultwarden.crt
+
+- name: Créer le vhost nginx Vaultwarden
+  copy:
+    dest: /etc/nginx/sites-available/vaultwarden.conf
+    content: |
+      server {
+          listen 80;
+          server_name 192.168.10.34;
+          return 301 https://$host$request_uri;
+      }
+
+      server {
+          listen 443 ssl;
+          server_name 192.168.10.34;
+
+          ssl_certificate /etc/ssl/certs/vaultwarden.crt;
+          ssl_certificate_key /etc/ssl/private/vaultwarden.key;
+          ssl_session_timeout 1d;
+          ssl_session_cache shared:SSL:10m;
+          ssl_protocols TLSv1.2 TLSv1.3;
+
+          client_max_body_size 128M;
+
+          location / {
+              proxy_pass http://127.0.0.1:8080;
+              proxy_set_header Host $host;
+              proxy_set_header X-Real-IP $remote_addr;
+              proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+              proxy_set_header X-Forwarded-Proto $scheme;
+          }
+
+          location /notifications/hub {
+              proxy_pass http://127.0.0.1:8080;
+              proxy_http_version 1.1;
+              proxy_set_header Upgrade $http_upgrade;
+              proxy_set_header Connection "upgrade";
+              proxy_set_header Host $host;
+          }
+
+          location /notifications/hub/negotiate {
+              proxy_pass http://127.0.0.1:8080;
+          }
+      }
+
+- name: Activer le vhost Vaultwarden
+  file:
+    src: /etc/nginx/sites-available/vaultwarden.conf
+    dest: /etc/nginx/sites-enabled/vaultwarden.conf
+    state: link
+    force: yes
+
+- name: Désactiver le site par défaut nginx
+  file:
+    path: /etc/nginx/sites-enabled/default
+    state: absent
+
+- name: Démarrer Nginx
+  systemd:
+    name: nginx
+    state: restarted
+    enabled: yes
+
+- name: Vérifier que Vaultwarden répond
+  uri:
+    url: https://192.168.10.34
+    status_code: 200
+    validate_certs: no
+    timeout: 30
+  register: result
+  until: result.status == 200
+  retries: 10
+  delay: 5
+
+- name: Afficher les informations
+  debug:
+    msg: |
+      ✅ Vaultwarden installé avec succès !
+
+      🌐 URL          : https://192.168.10.34
+      🔧 Admin panel  : https://192.168.10.34/admin
+      🔑 Admin token  : vaultwardenadmin123
+
+      ⚠️  Accepte le certificat auto-signé dans ton navigateur.
+
+      👤 Crée ton compte sur https://192.168.10.34/#/register
+      📱 Compatible avec tous les clients Bitwarden !

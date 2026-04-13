@@ -86,3 +86,9 @@
   become: yes
   roles:
     - jitsi
+
+- name: Installation de Vaultwarden
+  hosts: vaultwarden
+  become: yes
+  roles:
+    - vaultwarden
