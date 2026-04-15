@@ -1,0 +1,118 @@
+---
+- name: Mise à jour des paquets
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+
+- name: Installer les dépendances
+  apt:
+    name:
+      - curl
+      - wget
+      - ca-certificates
+      - apt-transport-https
+      - software-properties-common
+      - openjdk-21-jre-headless
+    state: present
+
+- name: Créer l'utilisateur metabase
+  user:
+    name: metabase
+    system: yes
+    shell: /bin/false
+    home: /opt/metabase
+    create_home: yes
+
+- name: Créer les répertoires metabase
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: metabase
+    group: metabase
+    mode: "0755"
+  loop:
+    - /opt/metabase
+    - /opt/metabase/data
+
+- name: Télécharger le JAR Metabase
+  get_url:
+    url: "https://downloads.metabase.com/v0.52.6/metabase.jar"
+    dest: /opt/metabase/metabase.jar
+    owner: metabase
+    group: metabase
+    mode: "0644"
+
+- name: Créer le service systemd Metabase
+  copy:
+    dest: /etc/systemd/system/metabase.service
+    content: |
+      [Unit]
+      Description=Metabase Business Intelligence
+      After=network.target
+
+      [Service]
+      Type=simple
+      User=metabase
+      Group=metabase
+      WorkingDirectory=/opt/metabase
+      ExecStart=/usr/bin/java -jar /opt/metabase/metabase.jar
+      Restart=on-failure
+      RestartSec=10
+
+      Environment=MB_DB_TYPE=h2
+      Environment=MB_DB_FILE=/opt/metabase/data/metabase.db
+      Environment=MB_JETTY_HOST=0.0.0.0
+      Environment=MB_JETTY_PORT=3000
+      Environment=JAVA_TIMEZONE=Africa/Dakar
+
+      StandardOutput=journal
+      StandardError=journal
+
+      [Install]
+      WantedBy=multi-user.target
+    mode: "0644"
+
+- name: Recharger systemd
+  systemd:
+    daemon_reload: yes
+
+- name: Activer et démarrer Metabase
+  systemd:
+    name: metabase
+    enabled: yes
+    state: started
+
+- name: Ouvrir le port 3000 (UFW)
+  ufw:
+    rule: allow
+    port: "3000"
+    proto: tcp
+
+- name: Attendre que Metabase démarre (2-3 min)
+  wait_for:
+    port: 3000
+    host: 192.168.10.36
+    delay: 30
+    timeout: 240
+
+- name: Vérifier que Metabase répond
+  uri:
+    url: http://192.168.10.36:3000
+    status_code: 200
+    timeout: 30
+  register: result
+  until: result.status == 200
+  retries: 10
+  delay: 15
+
+- name: Afficher les informations
+  debug:
+    msg: |
+      ✅ Metabase installé avec succès !
+
+      🌐 Interface : http://192.168.10.36:3000
+      📁 Données   : /opt/metabase/data
+
+      Connexions disponibles :
+        - Odoo PostgreSQL → 192.168.10.12:5432
+        - Base de données : odoo

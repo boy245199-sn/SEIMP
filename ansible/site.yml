@@ -74,21 +74,25 @@
   become: yes
   roles:
     - nginx-proxy-manager
+  tags: npm
 
 - name: Installation de Jitsi Meet
   hosts: jitsi
   become: yes
   roles:
     - jitsi
-
-- name: Installation de Jitsi Meet
-  hosts: jitsi
-  become: yes
-  roles:
-    - jitsi
+  tags: jitsi
 
 - name: Installation de Vaultwarden
   hosts: vaultwarden
   become: yes
   roles:
     - vaultwarden
+  tags: vaultwarden
+
+- name: Installation de Metabase
+  hosts: metabase
+  become: yes
+  roles:
+    - metabase
+  tags: metabase

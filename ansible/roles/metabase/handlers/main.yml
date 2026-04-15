@@ -1,0 +1,5 @@
+---
+- name: restart metabase
+  systemd:
+    name: metabase
+    state: restarted
