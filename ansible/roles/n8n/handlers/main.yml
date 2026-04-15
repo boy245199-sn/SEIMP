@@ -1,0 +1,5 @@
+---
+- name: restart n8n
+  systemd:
+    name: n8n
+    state: restarted

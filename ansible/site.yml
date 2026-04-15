@@ -96,3 +96,10 @@
   roles:
     - metabase
   tags: metabase
+  
+- name: Installation de n8n
+  hosts: n8n
+  become: yes
+  roles:
+    - n8n
+  tags: n8n

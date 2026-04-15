@@ -1,0 +1,132 @@
+---
+- name: Mise à jour des paquets
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+
+- name: Installer les dépendances
+  apt:
+    name:
+      - curl
+      - wget
+      - ca-certificates
+      - apt-transport-https
+      - software-properties-common
+      - gnupg2
+    state: present
+
+- name: Installer Node.js 20 (LTS)
+  shell: |
+    curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+    apt-get install -y nodejs
+  args:
+    creates: /usr/bin/node
+
+- name: Installer n8n via npm global
+  shell: |
+    npm install -g n8n
+  args:
+    creates: /usr/bin/n8n
+
+- name: Créer l'utilisateur n8n
+  user:
+    name: n8n
+    system: yes
+    shell: /bin/false
+    home: /opt/n8n
+    create_home: yes
+
+- name: Créer les répertoires n8n
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: n8n
+    group: n8n
+    mode: "0755"
+  loop:
+    - /opt/n8n
+    - /opt/n8n/data
+
+- name: Détecter le chemin réel de n8n
+  command: which n8n
+  register: n8n_path
+  changed_when: false
+
+- name: Créer le service systemd n8n
+  copy:
+    dest: /etc/systemd/system/n8n.service
+    content: |
+      [Unit]
+      Description=n8n Workflow Automation
+      After=network.target
+
+      [Service]
+      Type=simple
+      User=n8n
+      Group=n8n
+      WorkingDirectory=/opt/n8n
+      ExecStart={{ n8n_path.stdout }} start
+      Restart=on-failure
+      RestartSec=10
+
+      Environment=N8N_HOST=0.0.0.0
+      Environment=N8N_PORT=5678
+      Environment=N8N_PROTOCOL=http
+      Environment=N8N_USER_FOLDER=/opt/n8n/data
+      Environment=GENERIC_TIMEZONE=Africa/Dakar
+      Environment=N8N_METRICS=true
+      Environment=N8N_SECURE_COOKIE=false
+
+      StandardOutput=journal
+      StandardError=journal
+
+      [Install]
+      WantedBy=multi-user.target
+    mode: "0644"
+
+- name: Recharger systemd
+  systemd:
+    daemon_reload: yes
+
+- name: Activer et démarrer n8n
+  systemd:
+    name: n8n
+    enabled: yes
+    state: started
+
+- name: Ouvrir le port 5678 (UFW)
+  ufw:
+    rule: allow
+    port: "5678"
+    proto: tcp
+
+- name: Attendre que n8n démarre
+  wait_for:
+    port: 5678
+    host: 192.168.10.37
+    delay: 15
+    timeout: 180
+
+- name: Vérifier que n8n répond
+  uri:
+    url: http://192.168.10.37:5678
+    status_code: 200
+    timeout: 30
+  register: result
+  until: result.status == 200
+  retries: 10
+  delay: 15
+
+- name: Afficher les informations
+  debug:
+    msg: |
+      ✅ n8n installé avec succès !
+
+      🌐 Interface : http://192.168.10.37:5678
+      📁 Données   : /opt/n8n/data
+
+      Connexions disponibles :
+        - Odoo PostgreSQL → 192.168.10.12
+        - Mail            → 192.168.10.30
+        - Nextcloud       → 192.168.10.11
+        - LDAP            → 192.168.10.10
