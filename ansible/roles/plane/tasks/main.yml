@@ -1,0 +1,287 @@
+---
+- name: Mise à jour des paquets
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+
+- name: Installer les dépendances
+  apt:
+    name:
+      - curl
+      - wget
+      - gnupg2
+      - ca-certificates
+      - apt-transport-https
+      - software-properties-common
+    state: present
+
+- name: Installer Docker GPG key
+  shell: |
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+  args:
+    creates: /usr/share/keyrings/docker-archive-keyring.gpg
+
+- name: Ajouter le dépôt Docker
+  shell: |
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" > /etc/apt/sources.list.d/docker.list
+  args:
+    creates: /etc/apt/sources.list.d/docker.list
+
+- name: Installer Docker
+  apt:
+    name:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+      - docker-compose-plugin
+    update_cache: yes
+    state: present
+
+- name: Démarrer Docker
+  systemd:
+    name: docker
+    state: started
+    enabled: yes
+
+- name: Créer les répertoires Plane
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - /opt/plane
+    - /opt/plane/data
+    - /opt/plane/data/postgres
+    - /opt/plane/data/redis
+    - /opt/plane/data/minio
+    - /opt/plane/data/rabbitmq
+    - /opt/plane/logs
+
+- name: Créer le fichier .env Plane
+  copy:
+    dest: /opt/plane/.env
+    content: |
+      SITE_ADDRESS=:80
+      FILE_SIZE_LIMIT=5242880
+      BUCKET_NAME=uploads
+      GUNICORN_WORKERS=2
+      PGHOST=plane-db
+      PGDATABASE=plane
+      POSTGRES_USER=plane
+      POSTGRES_PASSWORD=plane123
+      POSTGRES_DB=plane
+      DATABASE_URL=postgresql://plane:plane123@plane-db/plane
+      REDIS_HOST=plane-redis
+      REDIS_PORT=6379
+      REDIS_URL=redis://plane-redis:6379/
+      RABBITMQ_HOST=plane-rabbitmq
+      RABBITMQ_PORT=5672
+      RABBITMQ_USER=plane
+      RABBITMQ_PASSWORD=plane123
+      RABBITMQ_VHOST=plane
+      SECRET_KEY=plane-secret-key-seimp-2024
+      EMAIL_HOST=192.168.10.30
+      EMAIL_PORT=25
+      EMAIL_USE_TLS=0
+      EMAIL_FROM=plane@seimp.local
+      USE_MINIO=1
+      MINIO_ROOT_USER=plane
+      MINIO_ROOT_PASSWORD=plane123
+      MINIO_HOST=plane-minio
+      MINIO_PORT=9000
+      AWS_ACCESS_KEY_ID=plane
+      AWS_SECRET_ACCESS_KEY=plane123
+      AWS_REGION=us-east-1
+      AWS_S3_BUCKET_NAME=uploads
+      AWS_S3_ENDPOINT_URL=http://plane-minio:9000
+      WEB_URL=http://192.168.10.38
+    mode: "0644"
+
+- name: Créer le docker-compose.yml Plane
+  copy:
+    dest: /opt/plane/docker-compose.yml
+    content: |
+      services:
+        web:
+          image: makeplane/plane-frontend:stable
+          container_name: plane-web
+          restart: unless-stopped
+          env_file: /opt/plane/.env
+          depends_on:
+            - api
+          networks:
+            - plane_network
+
+        api:
+          image: makeplane/plane-backend:stable
+          container_name: plane-api
+          restart: unless-stopped
+          command: ./bin/docker-entrypoint-api.sh
+          env_file: /opt/plane/.env
+          depends_on:
+            - db
+            - redis
+            - rabbitmq
+          networks:
+            - plane_network
+
+        worker:
+          image: makeplane/plane-backend:stable
+          container_name: plane-worker
+          restart: unless-stopped
+          command: ./bin/docker-entrypoint-worker.sh
+          env_file: /opt/plane/.env
+          depends_on:
+            - api
+            - db
+            - redis
+            - rabbitmq
+          networks:
+            - plane_network
+
+        beat-worker:
+          image: makeplane/plane-backend:stable
+          container_name: plane-beat-worker
+          restart: unless-stopped
+          command: ./bin/docker-entrypoint-beat.sh
+          env_file: /opt/plane/.env
+          depends_on:
+            - api
+            - db
+            - redis
+            - rabbitmq
+          networks:
+            - plane_network
+
+        db:
+          image: postgres:15-alpine
+          container_name: plane-db
+          restart: unless-stopped
+          environment:
+            POSTGRES_USER: plane
+            POSTGRES_PASSWORD: plane123
+            POSTGRES_DB: plane
+          volumes:
+            - /opt/plane/data/postgres:/var/lib/postgresql/data
+          networks:
+            - plane_network
+
+        redis:
+          image: redis:7-alpine
+          container_name: plane-redis
+          restart: unless-stopped
+          volumes:
+            - /opt/plane/data/redis:/data
+          networks:
+            - plane_network
+
+        rabbitmq:
+          image: rabbitmq:3.13-alpine
+          container_name: plane-rabbitmq
+          restart: unless-stopped
+          environment:
+            RABBITMQ_DEFAULT_USER: plane
+            RABBITMQ_DEFAULT_PASS: plane123
+            RABBITMQ_DEFAULT_VHOST: plane
+          volumes:
+            - /opt/plane/data/rabbitmq:/var/lib/rabbitmq
+          networks:
+            - plane_network
+
+        minio:
+          image: minio/minio
+          container_name: plane-minio
+          restart: unless-stopped
+          command: server /data --console-address ":9090"
+          environment:
+            MINIO_ROOT_USER: plane
+            MINIO_ROOT_PASSWORD: plane123
+          volumes:
+            - /opt/plane/data/minio:/data
+          networks:
+            - plane_network
+
+        proxy:
+          image: makeplane/plane-proxy:stable
+          container_name: plane-proxy
+          restart: unless-stopped
+          ports:
+            - "80:80"
+          env_file: /opt/plane/.env
+          depends_on:
+            - web
+            - api
+          networks:
+            - plane_network
+
+      networks:
+        plane_network:
+          driver: bridge
+    mode: "0644"
+
+- name: Pull des images Docker (avec retry réseau)
+  shell: cd /opt/plane && docker compose pull
+  register: pull_result
+  retries: 5
+  delay: 30
+  until: pull_result.rc == 0
+
+- name: Lancer Plane
+  shell: cd /opt/plane && docker compose up -d
+  args:
+    creates: /opt/plane/data/postgres/PG_VERSION
+
+- name: Attendre que RabbitMQ soit prêt (via docker exec)
+  shell: docker exec plane-rabbitmq rabbitmq-diagnostics ping
+  register: rabbit_check
+  retries: 12
+  delay: 15
+  until: rabbit_check.rc == 0
+
+- name: Exécuter les migrations
+  shell: docker exec plane-api python manage.py migrate
+  retries: 5
+  delay: 15
+  register: result
+  until: result.rc == 0
+
+- name: Configurer le bucket MinIO
+  shell: |
+    docker exec plane-minio mc alias set local http://localhost:9000 plane plane123
+    docker exec plane-api python manage.py create_bucket
+  ignore_errors: yes
+
+- name: Créer le script admin
+  copy:
+    dest: /opt/plane/create_admin.py
+    content: |
+      from plane.db.models import User
+      if not User.objects.filter(email='admin@seimp.local').exists():
+          u = User.objects.create_superuser(email='admin@seimp.local', username='admin', password='Admin1234!')
+          print('User created')
+      else:
+          print('User already exists')
+    mode: "0644"
+
+- name: Créer l'utilisateur admin
+  shell: docker exec -i plane-api python manage.py shell < /opt/plane/create_admin.py
+
+- name: Créer l'instance admin
+  shell: docker exec plane-api python manage.py create_instance_admin admin@seimp.local
+  ignore_errors: yes
+
+- name: Ouvrir le port 80 (UFW)
+  ufw:
+    rule: allow
+    port: "80"
+    proto: tcp
+
+- name: Afficher les informations
+  debug:
+    msg: |
+      Plane installé avec succès !
+      Interface  : http://192.168.10.38
+      Login      : admin@seimp.local
+      Password   : Admin1234!

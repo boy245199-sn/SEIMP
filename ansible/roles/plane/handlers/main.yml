@@ -1,0 +1,3 @@
+---
+- name: restart plane
+  shell: cd /opt/plane && docker compose restart
