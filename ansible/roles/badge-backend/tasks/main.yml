@@ -75,7 +75,7 @@
       app = Flask(__name__)
       auth = HTTPBasicAuth()
 
-      LDAP_SERVER = "ldap://192.168.10.10"
+      LDAP_SERVER = "ldap://192.168.20.10"
       LDAP_BASE_DN = "ou=people,dc=nodomain"
       LDAP_ADMIN_DN = "cn=admin,dc=nodomain"
       LDAP_ADMIN_PASSWORD = "admin123"

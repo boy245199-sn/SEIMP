@@ -131,7 +131,7 @@
     msg: |
       ✅ Nginx Proxy Manager installé avec succès !
 
-      🌐 Interface admin : http://192.168.10.33:81
+      🌐 Interface admin : http://192.168.20.33:81
       👤 Login          : admin@example.com
       🔑 Mot de passe   : changeme
 
