@@ -1,0 +1,1244 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SEIMP — Portail Employé</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --white: #ffffff;
+  --off-white: #f8f9fc;
+  --light: #f0f3f9;
+  --light2: #e4eaf5;
+  --blue: #1a5cff;
+  --blue-light: #3b74ff;
+  --blue-pale: #eef2ff;
+  --blue-pale2: #dde6ff;
+  --navy: #0a1f5c;
+  --text: #0f1a2e;
+  --text2: #4a5568;
+  --text3: #8492a6;
+  --border: #e2e8f0;
+  --border-blue: rgba(26,92,255,0.15);
+  --shadow: 0 1px 3px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.04);
+  --shadow-md: 0 4px 24px rgba(0,0,0,0.08), 0 1px 4px rgba(0,0,0,0.04);
+  --shadow-lg: 0 16px 48px rgba(0,0,0,0.1), 0 4px 12px rgba(0,0,0,0.06);
+  --shadow-blue: 0 8px 32px rgba(26,92,255,0.18);
+  --radius: 16px;
+  --radius-sm: 10px;
+}
+
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+html { scroll-behavior: smooth; font-size: 16px; }
+
+body {
+  background: var(--white);
+  color: var(--text);
+  font-family: 'Outfit', sans-serif;
+  font-weight: 400;
+  line-height: 1.6;
+  overflow-x: hidden;
+}
+
+/* ── SCROLLBAR ── */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: var(--light); }
+::-webkit-scrollbar-thumb { background: var(--blue-pale2); border-radius: 3px; }
+
+/* ── SELECTION ── */
+::selection { background: var(--blue-pale2); color: var(--navy); }
+
+/* ── LAYOUT ── */
+.container { max-width: 1200px; margin: 0 auto; padding: 0 40px; }
+
+/* ── NAV ── */
+nav {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 1000;
+  background: rgba(255,255,255,0.92);
+  backdrop-filter: blur(24px);
+  border-bottom: 1px solid var(--border);
+  height: 68px;
+}
+.nav-inner {
+  max-width: 1200px; margin: 0 auto; padding: 0 40px;
+  height: 100%; display: flex; align-items: center; justify-content: space-between;
+}
+.nav-logo {
+  display: flex; align-items: center; gap: 10px; text-decoration: none;
+}
+.nav-logo-mark {
+  width: 36px; height: 36px; border-radius: 10px;
+  background: var(--blue);
+  display: flex; align-items: center; justify-content: center;
+  color: white; font-family: 'Playfair Display', serif; font-weight: 700; font-size: 16px;
+  box-shadow: 0 4px 12px rgba(26,92,255,0.3);
+}
+.nav-logo-text {
+  font-family: 'Playfair Display', serif; font-weight: 700;
+  font-size: 20px; color: var(--navy); letter-spacing: -0.3px;
+}
+.nav-links { display: flex; align-items: center; gap: 8px; list-style: none; }
+.nav-links a {
+  color: var(--text2); text-decoration: none; font-size: 14px; font-weight: 500;
+  padding: 8px 14px; border-radius: 8px; transition: all 0.2s;
+}
+.nav-links a:hover { color: var(--blue); background: var(--blue-pale); }
+.nav-right { display: flex; align-items: center; gap: 12px; }
+.nav-time {
+  font-size: 13px; color: var(--text3); font-weight: 500;
+  padding: 6px 12px; background: var(--light); border-radius: 8px;
+}
+.btn-nav {
+  background: var(--blue); color: white;
+  padding: 9px 20px; border-radius: 10px;
+  font-size: 13px; font-weight: 600; text-decoration: none;
+  transition: all 0.2s; box-shadow: 0 2px 8px rgba(26,92,255,0.25);
+  letter-spacing: 0.2px;
+}
+.btn-nav:hover { background: var(--blue-light); box-shadow: var(--shadow-blue); transform: translateY(-1px); }
+
+/* ── HERO ── */
+.hero {
+  padding: 140px 40px 100px;
+  max-width: 1200px; margin: 0 auto;
+  display: grid; grid-template-columns: 1fr 1fr; gap: 80px; align-items: center;
+}
+.hero-eyebrow {
+  display: inline-flex; align-items: center; gap: 8px;
+  background: var(--blue-pale); border: 1px solid var(--blue-pale2);
+  color: var(--blue); font-size: 12px; font-weight: 600;
+  padding: 6px 14px; border-radius: 100px; letter-spacing: 1px;
+  text-transform: uppercase; margin-bottom: 28px;
+  animation: fadeUp 0.5s ease both;
+}
+.hero-eyebrow-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--blue); animation: blink 2s infinite; }
+.hero h1 {
+  font-family: 'Playfair Display', serif;
+  font-size: clamp(40px, 5vw, 64px);
+  font-weight: 700; line-height: 1.1;
+  letter-spacing: -1.5px; color: var(--navy);
+  margin-bottom: 24px;
+  animation: fadeUp 0.5s 0.08s ease both;
+}
+.hero h1 em {
+  font-style: italic; color: var(--blue);
+  background: linear-gradient(135deg, var(--blue), #4f8eff);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+}
+.hero-sub {
+  font-size: 17px; color: var(--text2); line-height: 1.7;
+  max-width: 460px; margin-bottom: 40px; font-weight: 400;
+  animation: fadeUp 0.5s 0.16s ease both;
+}
+.hero-actions {
+  display: flex; gap: 12px; flex-wrap: wrap;
+  animation: fadeUp 0.5s 0.24s ease both;
+}
+.btn-primary {
+  background: var(--blue); color: white;
+  padding: 14px 28px; border-radius: var(--radius-sm);
+  font-size: 15px; font-weight: 600; text-decoration: none;
+  box-shadow: var(--shadow-blue); transition: all 0.2s;
+  display: inline-flex; align-items: center; gap: 8px;
+}
+.btn-primary:hover { background: var(--blue-light); transform: translateY(-2px); box-shadow: 0 12px 40px rgba(26,92,255,0.25); }
+.btn-outline {
+  background: white; color: var(--text);
+  padding: 14px 28px; border-radius: var(--radius-sm);
+  font-size: 15px; font-weight: 600; text-decoration: none;
+  border: 1.5px solid var(--border); transition: all 0.2s;
+  display: inline-flex; align-items: center; gap: 8px;
+}
+.btn-outline:hover { border-color: var(--blue); color: var(--blue); background: var(--blue-pale); }
+
+.hero-stats {
+  display: flex; gap: 32px; margin-top: 52px; padding-top: 40px;
+  border-top: 1px solid var(--border);
+  animation: fadeUp 0.5s 0.32s ease both;
+}
+.stat { }
+.stat-num {
+  font-family: 'Playfair Display', serif; font-size: 38px; font-weight: 700;
+  color: var(--navy); letter-spacing: -1px; line-height: 1;
+}
+.stat-num span { color: var(--blue); }
+.stat-label { font-size: 13px; color: var(--text3); margin-top: 4px; font-weight: 500; }
+
+/* Hero visual */
+.hero-visual {
+  position: relative; animation: fadeUp 0.5s 0.12s ease both;
+}
+.hero-card-main {
+  background: white; border-radius: 20px;
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-lg);
+  padding: 28px; overflow: hidden;
+}
+.hero-card-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 24px;
+}
+.hero-card-dots { display: flex; gap: 6px; }
+.hero-card-dots span {
+  width: 10px; height: 10px; border-radius: 50%;
+}
+.hero-card-dots span:nth-child(1) { background: #ff5f57; }
+.hero-card-dots span:nth-child(2) { background: #febc2e; }
+.hero-card-dots span:nth-child(3) { background: #28c840; }
+.hero-card-title { font-size: 13px; font-weight: 600; color: var(--text3); }
+.hero-mini-services {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+}
+.hero-mini-service {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px; border-radius: 10px;
+  background: var(--off-white); border: 1px solid var(--border);
+  transition: all 0.2s; cursor: default;
+}
+.hero-mini-service:hover { background: var(--blue-pale); border-color: var(--border-blue); }
+.hero-mini-icon { font-size: 18px; }
+.hero-mini-name { font-size: 13px; font-weight: 600; color: var(--text); }
+.hero-mini-status { font-size: 11px; color: #22c55e; font-weight: 500; }
+
+.hero-badge-float {
+  position: absolute; top: -16px; right: -16px;
+  background: white; border: 1px solid var(--border);
+  border-radius: 14px; padding: 14px 18px;
+  box-shadow: var(--shadow-md);
+  display: flex; align-items: center; gap: 10px;
+  animation: float 4s ease-in-out infinite;
+}
+.hero-badge-icon { font-size: 22px; }
+.hero-badge-text { font-size: 13px; font-weight: 600; color: var(--text); }
+.hero-badge-sub { font-size: 11px; color: var(--text3); }
+
+.hero-badge-float2 {
+  position: absolute; bottom: -16px; left: -16px;
+  background: var(--blue); border-radius: 14px; padding: 14px 18px;
+  box-shadow: var(--shadow-blue);
+  display: flex; align-items: center; gap: 10px;
+  animation: float 4s 2s ease-in-out infinite;
+}
+.hero-badge-float2 .hero-badge-text { color: white; }
+.hero-badge-float2 .hero-badge-sub { color: rgba(255,255,255,0.7); }
+
+/* ── SECTION COMMONS ── */
+.section { padding: 96px 0; }
+.section-alt { background: var(--off-white); }
+.section-header { margin-bottom: 56px; }
+.section-eyebrow {
+  font-size: 11px; font-weight: 700; letter-spacing: 2px;
+  text-transform: uppercase; color: var(--blue);
+  margin-bottom: 12px; display: flex; align-items: center; gap: 8px;
+}
+.section-eyebrow::before {
+  content: ''; width: 20px; height: 2px; background: var(--blue); border-radius: 1px;
+}
+.section-title {
+  font-family: 'Playfair Display', serif;
+  font-size: clamp(26px, 3.5vw, 40px);
+  font-weight: 700; letter-spacing: -0.8px; color: var(--navy);
+  line-height: 1.2; margin-bottom: 14px;
+}
+.section-sub { font-size: 16px; color: var(--text2); max-width: 500px; font-weight: 400; }
+
+/* ── SERVICES ── */
+.services-grid {
+  display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px;
+}
+.service-card {
+  background: white; border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 24px 20px;
+  text-decoration: none; color: var(--text);
+  transition: all 0.25s; position: relative; overflow: hidden;
+  box-shadow: var(--shadow);
+}
+.service-card::after {
+  content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 3px;
+  background: var(--blue); transform: scaleX(0); transition: transform 0.3s;
+  transform-origin: left;
+}
+.service-card:hover { transform: translateY(-4px); box-shadow: var(--shadow-md); border-color: var(--border-blue); }
+.service-card:hover::after { transform: scaleX(1); }
+.service-icon-wrap {
+  width: 46px; height: 46px; border-radius: 12px;
+  background: var(--blue-pale); display: flex; align-items: center; justify-content: center;
+  font-size: 20px; margin-bottom: 14px;
+  transition: background 0.2s;
+}
+.service-card:hover .service-icon-wrap { background: var(--blue-pale2); }
+.service-name { font-weight: 700; font-size: 14px; margin-bottom: 5px; color: var(--navy); }
+.service-desc { font-size: 12px; color: var(--text3); line-height: 1.5; }
+.service-link {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 12px; font-weight: 600; color: var(--blue);
+  margin-top: 10px; opacity: 0; transform: translateY(4px);
+  transition: all 0.2s;
+}
+.service-card:hover .service-link { opacity: 1; transform: translateY(0); }
+.service-status {
+  position: absolute; top: 16px; right: 16px;
+  width: 7px; height: 7px; border-radius: 50%; background: #22c55e;
+}
+
+/* ── WEATHER/STATUS BAR ── */
+.status-bar {
+  background: var(--navy); padding: 16px 0;
+}
+.status-inner {
+  max-width: 1200px; margin: 0 auto; padding: 0 40px;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.status-items { display: flex; gap: 32px; }
+.status-item { display: flex; align-items: center; gap: 8px; }
+.status-dot { width: 8px; height: 8px; border-radius: 50%; background: #22c55e; animation: blink 2s infinite; }
+.status-dot.warn { background: #f59e0b; }
+.status-label { font-size: 13px; color: rgba(255,255,255,0.7); font-weight: 500; }
+.status-val { font-size: 13px; color: white; font-weight: 600; }
+.status-time { font-size: 13px; color: rgba(255,255,255,0.5); }
+
+/* ── MANUEL ── */
+.manuel-layout { display: grid; grid-template-columns: 280px 1fr; gap: 32px; align-items: start; }
+.manuel-nav {
+  background: white; border: 1px solid var(--border);
+  border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow);
+  position: sticky; top: 88px;
+}
+.manuel-nav-title {
+  padding: 18px 20px; background: var(--navy); color: white;
+  font-weight: 700; font-size: 14px; letter-spacing: 0.3px;
+}
+.manuel-nav-item {
+  display: flex; align-items: center; gap: 12px;
+  padding: 14px 20px; cursor: pointer; transition: all 0.15s;
+  border-bottom: 1px solid var(--border); font-size: 14px; font-weight: 500;
+  color: var(--text2);
+}
+.manuel-nav-item:last-child { border-bottom: none; }
+.manuel-nav-item:hover, .manuel-nav-item.active { background: var(--blue-pale); color: var(--blue); }
+.manuel-nav-item.active { border-left: 3px solid var(--blue); }
+.manuel-nav-icon { font-size: 16px; }
+
+.manuel-content { display: flex; flex-direction: column; gap: 20px; }
+.manuel-panel {
+  background: white; border: 1px solid var(--border);
+  border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow);
+  display: none;
+}
+.manuel-panel.active { display: block; }
+.manuel-panel-header {
+  padding: 22px 28px; border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: 14px;
+  background: linear-gradient(135deg, var(--blue-pale), white);
+}
+.manuel-panel-icon {
+  width: 44px; height: 44px; border-radius: 12px;
+  background: var(--blue); display: flex; align-items: center; justify-content: center;
+  font-size: 20px; box-shadow: 0 4px 12px rgba(26,92,255,0.2);
+}
+.manuel-panel-title { font-family: 'Playfair Display', serif; font-weight: 700; font-size: 20px; color: var(--navy); }
+.manuel-panel-sub { font-size: 13px; color: var(--text3); margin-top: 2px; }
+.manuel-panel-body { padding: 28px; }
+.manuel-rule {
+  display: flex; gap: 16px; padding: 16px 0;
+  border-bottom: 1px solid var(--light2);
+}
+.manuel-rule:last-child { border-bottom: none; padding-bottom: 0; }
+.manuel-rule-num {
+  width: 28px; height: 28px; border-radius: 8px;
+  background: var(--blue-pale); color: var(--blue);
+  font-size: 12px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.manuel-rule-title { font-weight: 600; font-size: 14px; color: var(--navy); margin-bottom: 4px; }
+.manuel-rule-text { font-size: 13px; color: var(--text2); line-height: 1.6; }
+.manuel-rule-text code { background: var(--blue-pale); color: var(--blue); padding: 1px 6px; border-radius: 4px; font-size: 12px; }
+
+/* ── ONBOARDING TIMELINE ── */
+.onboarding-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+.onboarding-step {
+  background: white; border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 28px;
+  box-shadow: var(--shadow); position: relative; overflow: hidden;
+  transition: all 0.25s;
+}
+.onboarding-step:hover { box-shadow: var(--shadow-md); transform: translateY(-3px); }
+.onboarding-step-num {
+  position: absolute; top: -10px; right: 20px;
+  font-family: 'Playfair Display', serif; font-size: 72px; font-weight: 700;
+  color: var(--light2); line-height: 1; user-select: none;
+}
+.onboarding-day {
+  display: inline-block; background: var(--blue-pale);
+  color: var(--blue); font-size: 11px; font-weight: 700;
+  padding: 4px 10px; border-radius: 6px; letter-spacing: 0.5px;
+  text-transform: uppercase; margin-bottom: 14px;
+}
+.onboarding-title { font-family: 'Playfair Display', serif; font-weight: 700; font-size: 20px; color: var(--navy); margin-bottom: 12px; }
+.onboarding-tasks { list-style: none; display: flex; flex-direction: column; gap: 8px; }
+.onboarding-tasks li {
+  display: flex; align-items: flex-start; gap: 10px;
+  font-size: 14px; color: var(--text2);
+}
+.onboarding-tasks li::before {
+  content: ''; width: 6px; height: 6px; border-radius: 50%;
+  background: var(--blue); margin-top: 7px; flex-shrink: 0;
+}
+.onboarding-tasks li strong { color: var(--text); font-weight: 600; }
+
+/* ── CONTACTS ── */
+.contacts-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; }
+.contact-card {
+  background: white; border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 28px 22px; text-align: center;
+  box-shadow: var(--shadow); transition: all 0.25s;
+}
+.contact-card:hover { box-shadow: var(--shadow-md); transform: translateY(-4px); border-color: var(--border-blue); }
+.contact-avatar {
+  width: 64px; height: 64px; border-radius: 50%;
+  background: linear-gradient(135deg, var(--blue-pale2), var(--blue-pale));
+  border: 2px solid var(--border-blue);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 26px; margin: 0 auto 16px;
+}
+.contact-name { font-family: 'Playfair Display', serif; font-weight: 700; font-size: 16px; color: var(--navy); margin-bottom: 4px; }
+.contact-role {
+  display: inline-block; background: var(--blue-pale); color: var(--blue);
+  font-size: 11px; font-weight: 700; padding: 3px 10px;
+  border-radius: 6px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px;
+}
+.contact-email {
+  font-size: 13px; color: var(--text3);
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+}
+.contact-email::before { content: '✉'; font-size: 12px; }
+
+/* ── NEWS/ANNOUNCEMENTS ── */
+.news-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 24px; }
+.news-main {
+  background: white; border: 1px solid var(--border);
+  border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow);
+}
+.news-img {
+  background: linear-gradient(135deg, var(--navy) 0%, #1a3a8c 100%);
+  height: 180px; display: flex; align-items: center; justify-content: center;
+  padding: 32px; position: relative; overflow: hidden;
+}
+.news-img::before {
+  content: ''; position: absolute; inset: 0;
+  background: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.04'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+}
+.news-img-content { position: relative; z-index: 1; text-align: center; color: white; }
+.news-img-icon { font-size: 40px; margin-bottom: 8px; }
+.news-img-title { font-family: 'Playfair Display', serif; font-size: 20px; font-weight: 700; }
+.news-body { padding: 24px; }
+.news-tag {
+  display: inline-block; background: var(--blue-pale); color: var(--blue);
+  font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 6px;
+  text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 10px;
+}
+.news-title { font-weight: 700; font-size: 16px; color: var(--navy); margin-bottom: 8px; }
+.news-text { font-size: 14px; color: var(--text2); line-height: 1.6; }
+.news-date { font-size: 12px; color: var(--text3); margin-top: 12px; }
+
+.news-sidebar { display: flex; flex-direction: column; gap: 16px; }
+.news-item {
+  background: white; border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 18px;
+  box-shadow: var(--shadow); transition: all 0.2s; cursor: pointer;
+}
+.news-item:hover { border-color: var(--border-blue); box-shadow: var(--shadow-md); }
+.news-item-tag {
+  font-size: 10px; font-weight: 700; color: var(--blue);
+  text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;
+}
+.news-item-title { font-weight: 600; font-size: 13px; color: var(--navy); margin-bottom: 4px; }
+.news-item-date { font-size: 12px; color: var(--text3); }
+
+/* ── SEARCH BAR ── */
+.search-section {
+  background: var(--navy); padding: 48px 0;
+}
+.search-inner { max-width: 640px; margin: 0 auto; text-align: center; padding: 0 40px; }
+.search-title { font-family: 'Playfair Display', serif; font-size: 28px; font-weight: 700; color: white; margin-bottom: 8px; }
+.search-sub { font-size: 15px; color: rgba(255,255,255,0.6); margin-bottom: 24px; }
+.search-box {
+  display: flex; gap: 0; background: white; border-radius: 12px;
+  overflow: hidden; box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+}
+.search-input {
+  flex: 1; border: none; outline: none; padding: 16px 20px;
+  font-size: 15px; font-family: 'Outfit', sans-serif; color: var(--text);
+}
+.search-btn {
+  background: var(--blue); color: white; border: none; cursor: pointer;
+  padding: 16px 24px; font-size: 14px; font-weight: 600;
+  font-family: 'Outfit', sans-serif; transition: background 0.2s;
+}
+.search-btn:hover { background: var(--blue-light); }
+.search-tags { display: flex; gap: 8px; justify-content: center; margin-top: 16px; flex-wrap: wrap; }
+.search-tag {
+  background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.7);
+  font-size: 12px; padding: 5px 12px; border-radius: 20px;
+  cursor: pointer; transition: all 0.2s; border: 1px solid rgba(255,255,255,0.1);
+}
+.search-tag:hover { background: rgba(255,255,255,0.2); color: white; }
+
+/* ── QUICK ACTIONS ── */
+.quick-actions { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; margin-bottom: 48px; }
+.quick-action {
+  background: white; border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 16px 12px; text-align: center;
+  cursor: pointer; transition: all 0.2s; box-shadow: var(--shadow);
+  text-decoration: none; color: var(--text);
+}
+.quick-action:hover { background: var(--blue-pale); border-color: var(--border-blue); transform: translateY(-2px); }
+.quick-action-icon { font-size: 22px; margin-bottom: 6px; }
+.quick-action-label { font-size: 12px; font-weight: 600; color: var(--text2); }
+
+/* ── PROGRESS / ONBOARDING STATUS ── */
+.progress-card {
+  background: white; border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 28px; box-shadow: var(--shadow);
+  margin-bottom: 48px;
+}
+.progress-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+.progress-title { font-weight: 700; font-size: 16px; color: var(--navy); }
+.progress-pct { font-family: 'Playfair Display', serif; font-size: 28px; font-weight: 700; color: var(--blue); }
+.progress-bar-wrap { background: var(--light2); border-radius: 100px; height: 8px; margin-bottom: 20px; }
+.progress-bar { background: var(--blue); height: 8px; border-radius: 100px; width: 25%; transition: width 1s ease; }
+.progress-steps { display: flex; gap: 12px; }
+.progress-step {
+  flex: 1; padding: 10px 14px; border-radius: 8px;
+  font-size: 13px; font-weight: 600; text-align: center;
+  border: 1px solid var(--border); background: var(--light);
+  color: var(--text3);
+}
+.progress-step.done { background: var(--blue-pale); border-color: var(--border-blue); color: var(--blue); }
+.progress-step.current { background: var(--blue); color: white; border-color: var(--blue); }
+
+/* ── CHATBOT ── */
+#chat-fab {
+  position: fixed; bottom: 32px; right: 32px; z-index: 900;
+  width: 56px; height: 56px; border-radius: 50%;
+  background: var(--blue); border: none; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 4px 24px rgba(26,92,255,0.35);
+  transition: all 0.2s; font-size: 22px;
+}
+#chat-fab:hover { background: var(--blue-light); transform: scale(1.08); }
+#chat-fab .badge {
+  position: absolute; top: -3px; right: -3px;
+  width: 18px; height: 18px; border-radius: 50%;
+  background: #ef4444; color: white; font-size: 10px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  border: 2px solid white;
+}
+
+#chat-window {
+  position: fixed; bottom: 100px; right: 32px; z-index: 900;
+  width: 360px; height: 520px;
+  background: white; border-radius: 20px;
+  border: 1px solid var(--border); box-shadow: var(--shadow-lg);
+  display: flex; flex-direction: column; overflow: hidden;
+  transform: scale(0.95) translateY(16px); opacity: 0;
+  pointer-events: none;
+  transition: all 0.25s cubic-bezier(0.34, 1.4, 0.64, 1);
+}
+#chat-window.open { transform: scale(1) translateY(0); opacity: 1; pointer-events: all; }
+
+.chat-head {
+  background: var(--navy); padding: 18px 20px;
+  display: flex; align-items: center; gap: 12px;
+}
+.chat-head-avatar {
+  width: 38px; height: 38px; border-radius: 50%;
+  background: var(--blue); display: flex; align-items: center; justify-content: center;
+  font-size: 18px; border: 2px solid rgba(255,255,255,0.2);
+}
+.chat-head-name { font-weight: 700; font-size: 15px; color: white; }
+.chat-head-status { font-size: 12px; color: rgba(255,255,255,0.6); display: flex; align-items: center; gap: 5px; }
+.chat-head-status::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: #22c55e; display: inline-block; animation: blink 2s infinite; }
+.chat-head-close { margin-left: auto; background: none; border: none; color: rgba(255,255,255,0.6); cursor: pointer; font-size: 18px; padding: 4px; transition: color 0.2s; }
+.chat-head-close:hover { color: white; }
+
+.chat-body { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+.cmsg { display: flex; gap: 8px; max-width: 88%; animation: msgPop 0.25s ease; }
+.cmsg.bot { align-self: flex-start; }
+.cmsg.usr { align-self: flex-end; flex-direction: row-reverse; }
+.cmsg-av {
+  width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0;
+  background: var(--blue); display: flex; align-items: center; justify-content: center;
+  font-size: 13px;
+}
+.cmsg.usr .cmsg-av { background: var(--light2); }
+.cmsg-bubble {
+  padding: 10px 13px; border-radius: 12px; font-size: 13.5px; line-height: 1.55;
+  background: var(--off-white); color: var(--text);
+  border: 1px solid var(--border);
+}
+.cmsg.usr .cmsg-bubble { background: var(--blue); color: white; border-color: var(--blue); border-bottom-right-radius: 4px; }
+.cmsg.bot .cmsg-bubble { border-bottom-left-radius: 4px; }
+.cmsg-bubble a { color: var(--blue); text-decoration: none; font-weight: 600; }
+.cmsg.usr .cmsg-bubble a { color: rgba(255,255,255,0.85); }
+
+.chat-chips { padding: 4px 16px 8px; display: flex; flex-wrap: wrap; gap: 6px; }
+.chip {
+  background: var(--blue-pale); border: 1px solid var(--blue-pale2);
+  color: var(--blue); font-size: 12px; font-weight: 600;
+  padding: 5px 11px; border-radius: 20px; cursor: pointer;
+  transition: all 0.15s; white-space: nowrap;
+}
+.chip:hover { background: var(--blue-pale2); }
+
+.chat-foot { padding: 12px 14px; border-top: 1px solid var(--border); display: flex; gap: 8px; }
+.chat-input {
+  flex: 1; border: 1px solid var(--border); border-radius: 10px;
+  padding: 10px 14px; font-size: 13.5px; font-family: 'Outfit', sans-serif;
+  outline: none; resize: none; max-height: 80px; color: var(--text);
+  transition: border-color 0.2s;
+}
+.chat-input:focus { border-color: var(--blue); }
+.chat-send {
+  width: 38px; height: 38px; border-radius: 10px;
+  background: var(--blue); border: none; cursor: pointer;
+  color: white; font-size: 15px;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.15s; flex-shrink: 0;
+}
+.chat-send:hover { background: var(--blue-light); }
+
+.typing-ind { display: flex; gap: 3px; padding: 10px 13px; background: var(--off-white); border: 1px solid var(--border); border-radius: 12px; border-bottom-left-radius: 4px; width: fit-content; }
+.typing-ind span { width: 5px; height: 5px; border-radius: 50%; background: var(--text3); animation: typeDot 1s infinite; }
+.typing-ind span:nth-child(2) { animation-delay: 0.15s; }
+.typing-ind span:nth-child(3) { animation-delay: 0.3s; }
+
+/* ── FOOTER ── */
+footer {
+  background: var(--navy); padding: 56px 0 32px;
+}
+.footer-grid { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 48px; margin-bottom: 48px; }
+.footer-brand .nav-logo-mark { margin-bottom: 16px; }
+.footer-brand-name { font-family: 'Playfair Display', serif; font-size: 22px; font-weight: 700; color: white; margin-bottom: 8px; }
+.footer-brand-sub { font-size: 14px; color: rgba(255,255,255,0.5); line-height: 1.6; max-width: 260px; }
+.footer-col-title { font-weight: 700; font-size: 13px; color: white; letter-spacing: 0.5px; text-transform: uppercase; margin-bottom: 16px; }
+.footer-links { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+.footer-links a { color: rgba(255,255,255,0.5); text-decoration: none; font-size: 14px; transition: color 0.2s; }
+.footer-links a:hover { color: white; }
+.footer-divider { border: none; border-top: 1px solid rgba(255,255,255,0.08); margin-bottom: 24px; }
+.footer-bottom { display: flex; align-items: center; justify-content: space-between; }
+.footer-copy { font-size: 13px; color: rgba(255,255,255,0.3); }
+.footer-badges { display: flex; gap: 8px; }
+.footer-badge {
+  background: rgba(255,255,255,0.07); color: rgba(255,255,255,0.4);
+  font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 6px;
+}
+
+/* ── ANIMATIONS ── */
+@keyframes fadeUp { from { opacity:0; transform:translateY(20px); } to { opacity:1; transform:translateY(0); } }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+@keyframes float { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-8px)} }
+@keyframes msgPop { from{opacity:0;transform:scale(0.96) translateY(4px)} to{opacity:1;transform:scale(1) translateY(0)} }
+@keyframes typeDot { 0%,100%{transform:translateY(0);opacity:0.4} 50%{transform:translateY(-4px);opacity:1} }
+
+.reveal { opacity:0; transform:translateY(24px); transition:opacity 0.55s ease, transform 0.55s ease; }
+.reveal.vis { opacity:1; transform:translateY(0); }
+
+/* ── RESPONSIVE ── */
+@media(max-width:1024px) {
+  .services-grid { grid-template-columns: repeat(3, 1fr); }
+  .footer-grid { grid-template-columns: 1fr 1fr; gap: 32px; }
+}
+@media(max-width:768px) {
+  .hero { grid-template-columns: 1fr; gap: 48px; padding: 120px 24px 60px; }
+  .hero-visual { display: none; }
+  .container { padding: 0 24px; }
+  nav .nav-links, nav .nav-time { display: none; }
+  .services-grid { grid-template-columns: repeat(2, 1fr); }
+  .manuel-layout { grid-template-columns: 1fr; }
+  .manuel-nav { position: static; }
+  .onboarding-grid { grid-template-columns: 1fr; }
+  .contacts-grid { grid-template-columns: repeat(2, 1fr); }
+  .news-grid { grid-template-columns: 1fr; }
+  .quick-actions { grid-template-columns: repeat(3, 1fr); }
+  .footer-grid { grid-template-columns: 1fr; gap: 24px; }
+  #chat-window { width: calc(100vw - 32px); right: 16px; }
+}
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="nav-inner">
+    <a href="#" class="nav-logo">
+      <div class="nav-logo-mark">S</div>
+      <span class="nav-logo-text">SEIMP</span>
+    </a>
+    <ul class="nav-links">
+      <li><a href="#services">Services</a></li>
+      <li><a href="#manuel">Manuel</a></li>
+      <li><a href="#onboarding">Onboarding</a></li>
+      <li><a href="#actualites">Actualités</a></li>
+      <li><a href="#contacts">Contacts</a></li>
+    </ul>
+    <div class="nav-right">
+      <div class="nav-time" id="nav-clock">--:--</div>
+      <a href="#services" class="btn-nav">Accéder aux outils →</a>
+    </div>
+  </div>
+</nav>
+
+<!-- STATUS BAR -->
+<div class="status-bar" style="margin-top:68px;">
+  <div class="status-inner">
+    <div class="status-items">
+      <div class="status-item"><div class="status-dot"></div><span class="status-label">Infrastructure</span><span class="status-val">Opérationnelle</span></div>
+      <div class="status-item"><div class="status-dot"></div><span class="status-label">Réseau</span><span class="status-val">192.168.20.0/24</span></div>
+      <div class="status-item"><div class="status-dot warn"></div><span class="status-label">Maintenance</span><span class="status-val">Dim. 02h–04h</span></div>
+      <div class="status-item"><div class="status-dot"></div><span class="status-label">17 services actifs</span></div>
+    </div>
+    <div class="status-time" id="status-date">--</div>
+  </div>
+</div>
+
+<!-- HERO -->
+<div class="hero">
+  <div class="hero-left">
+    <div class="hero-eyebrow"><span class="hero-eyebrow-dot"></span>Portail Employé SEIMP</div>
+    <h1>Votre espace de travail <em>numérique</em> unifié.</h1>
+    <p class="hero-sub">Tous vos outils professionnels, votre documentation et vos ressources internes accessibles depuis un seul portail sécurisé.</p>
+    <div class="hero-actions">
+      <a href="#services" class="btn-primary">Découvrir les services <span>→</span></a>
+      <a href="#onboarding" class="btn-outline">Plan d'onboarding</a>
+    </div>
+    <div class="hero-stats">
+      <div class="stat"><div class="stat-num">17<span>+</span></div><div class="stat-label">Services disponibles</div></div>
+      <div class="stat"><div class="stat-num">99<span>%</span></div><div class="stat-label">Disponibilité</div></div>
+      <div class="stat"><div class="stat-num">24<span>/7</span></div><div class="stat-label">Accès continu</div></div>
+    </div>
+  </div>
+  <div class="hero-visual">
+    <div class="hero-badge-float">
+      <div class="hero-badge-icon">🟢</div>
+      <div><div class="hero-badge-text">Tous les services</div><div class="hero-badge-sub">opérationnels</div></div>
+    </div>
+    <div class="hero-card-main">
+      <div class="hero-card-header">
+        <div class="hero-card-dots"><span></span><span></span><span></span></div>
+        <div class="hero-card-title">Tableau de bord</div>
+      </div>
+      <div class="hero-mini-services">
+        <div class="hero-mini-service"><div class="hero-mini-icon">📖</div><div><div class="hero-mini-name">Wiki</div><div class="hero-mini-status">● En ligne</div></div></div>
+        <div class="hero-mini-service"><div class="hero-mini-icon">☁️</div><div><div class="hero-mini-name">Nextcloud</div><div class="hero-mini-status">● En ligne</div></div></div>
+        <div class="hero-mini-service"><div class="hero-mini-icon">🏢</div><div><div class="hero-mini-name">Odoo</div><div class="hero-mini-status">● En ligne</div></div></div>
+        <div class="hero-mini-service"><div class="hero-mini-icon">📋</div><div><div class="hero-mini-name">Plane</div><div class="hero-mini-status">● En ligne</div></div></div>
+        <div class="hero-mini-service"><div class="hero-mini-icon">📊</div><div><div class="hero-mini-name">Metabase</div><div class="hero-mini-status">● En ligne</div></div></div>
+        <div class="hero-mini-service"><div class="hero-mini-icon">🎥</div><div><div class="hero-mini-name">Jitsi</div><div class="hero-mini-status">● En ligne</div></div></div>
+      </div>
+    </div>
+    <div class="hero-badge-float2">
+      <div class="hero-badge-icon">🔐</div>
+      <div><div class="hero-badge-text">Authentification LDAP</div><div class="hero-badge-sub">Un seul compte, tous les accès</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- SEARCH -->
+<div class="search-section">
+  <div class="search-inner">
+    <h2 class="search-title">Trouvez ce dont vous avez besoin</h2>
+    <p class="search-sub">Recherchez dans les services, la documentation et les contacts</p>
+    <div class="search-box">
+      <input class="search-input" id="search-input" type="text" placeholder="Rechercher un service, une procédure...">
+      <button class="search-btn" onclick="doSearch()">Rechercher</button>
+    </div>
+    <div class="search-tags">
+      <span class="search-tag" onclick="searchFill('Nextcloud')">Nextcloud</span>
+      <span class="search-tag" onclick="searchFill('Odoo congés')">Congés Odoo</span>
+      <span class="search-tag" onclick="searchFill('VPN télétravail')">VPN</span>
+      <span class="search-tag" onclick="searchFill('mot de passe')">Mot de passe</span>
+      <span class="search-tag" onclick="searchFill('réunion Jitsi')">Jitsi Meet</span>
+      <span class="search-tag" onclick="searchFill('onboarding')">Onboarding</span>
+    </div>
+  </div>
+</div>
+
+<!-- DASHBOARD -->
+<section class="section">
+  <div class="container">
+
+    <!-- Progress -->
+    <div class="progress-card reveal">
+      <div class="progress-header">
+        <div>
+          <div class="progress-title">Mon parcours d'intégration</div>
+          <div style="font-size:13px;color:var(--text3);margin-top:3px;">Étape 1 sur 4 — Configuration des accès</div>
+        </div>
+        <div class="progress-pct" id="prog-pct">25%</div>
+      </div>
+      <div class="progress-bar-wrap"><div class="progress-bar" id="prog-bar"></div></div>
+      <div class="progress-steps">
+        <div class="progress-step current">1. Accès</div>
+        <div class="progress-step">2. Découverte</div>
+        <div class="progress-step">3. Formation</div>
+        <div class="progress-step">4. Intégration</div>
+      </div>
+    </div>
+
+    <!-- Quick actions -->
+    <div class="quick-actions reveal">
+      <a href="http://192.168.20.11" class="quick-action" target="_blank"><div class="quick-action-icon">☁️</div><div class="quick-action-label">Mes fichiers</div></a>
+      <a href="http://192.168.20.12" class="quick-action" target="_blank"><div class="quick-action-icon">📅</div><div class="quick-action-label">Mes congés</div></a>
+      <a href="http://192.168.20.38" class="quick-action" target="_blank"><div class="quick-action-icon">📋</div><div class="quick-action-label">Mes tâches</div></a>
+      <a href="http://192.168.20.30" class="quick-action" target="_blank"><div class="quick-action-icon">📧</div><div class="quick-action-label">Mes emails</div></a>
+      <a href="http://192.168.20.35" class="quick-action" target="_blank"><div class="quick-action-icon">🎥</div><div class="quick-action-label">Réunion</div></a>
+      <a href="http://192.168.20.34" class="quick-action" target="_blank"><div class="quick-action-icon">🔐</div><div class="quick-action-label">Mots de passe</div></a>
+    </div>
+
+    <!-- Services -->
+    <div id="services" class="section-header reveal">
+      <div class="section-eyebrow">Outils & Accès</div>
+      <h2 class="section-title">Vos services en un clic</h2>
+      <p class="section-sub">Cliquez sur un service pour y accéder directement depuis votre navigateur.</p>
+    </div>
+    <div class="services-grid">
+      <a href="http://192.168.20.32" class="service-card reveal" target="_blank"><div class="service-status"></div><div class="service-icon-wrap">📖</div><div class="service-name">Wiki BookStack</div><div class="service-desc">Documentation interne et base de connaissances</div><div class="service-link">Accéder →</div></a>
+      <a href="http://192.168.20.11" class="service-card reveal" target="_blank"><div class="service-status"></div><div class="service-icon-wrap">☁️</div><div class="service-name">Nextcloud</div><div class="service-desc">Stockage, partage et collaboration documentaire</div><div class="service-link">Accéder →</div></a>
+      <a href="http://192.168.20.35" class="service-card reveal" target="_blank"><div class="service-status"></div><div class="service-icon-wrap">🎥</div><div class="service-name">Jitsi Meet</div><div class="service-desc">Visioconférences et réunions sécurisées</div><div class="service-link">Accéder →</div></a>
+      <a href="http://192.168.20.12" class="service-card reveal" target="_blank"><div class="service-status"></div><div class="service-icon-wrap">🏢</div><div class="service-name">Odoo ERP</div><div class="service-desc">RH, comptabilité, ventes et gestion de projets</div><div class="service-link">Accéder →</div></a>
+      <a href="http://192.168.20.38" class="service-card reveal" target="_blank"><div class="service-status"></div><div class="service-icon-wrap">📋</div><div class="service-name">Plane</div><div class="service-desc">Gestion de projets, issues et roadmaps</div><div class="service-link">Accéder →</div></a>
+      <a href="http://192.168.20.30" class="service-card reveal" target="_blank"><div class="service-status"></div><div class="service-icon-wrap">📧</div><div class="service-name">Mailcow</div><div class="service-desc">Messagerie email professionnelle hébergée</div><div class="service-link">Accéder →</div></a>
+      <a href="http://192.168.20.36" class="service-card reveal" target="_blank"><div class="service-status"></div><div class="service-icon-wrap">📊</div><div class="service-name">Metabase</div><div class="service-desc">Tableaux de bord et visualisations métier</div><div class="service-link">Accéder →</div></a>
+      <a href="http://192.168.20.37" class="service-card reveal" target="_blank"><div class="service-status"></div><div class="service-icon-wrap">⚡</div><div class="service-name">n8n</div><div class="service-desc">Automatisation de workflows et intégrations</div><div class="service-link">Accéder →</div></a>
+      <a href="http://192.168.20.34" class="service-card reveal" target="_blank"><div class="service-status"></div><div class="service-icon-wrap">🔐</div><div class="service-name">Vaultwarden</div><div class="service-desc">Gestionnaire de mots de passe sécurisé</div><div class="service-link">Accéder →</div></a>
+      <a href="http://192.168.20.31" class="service-card reveal" target="_blank"><div class="service-status"></div><div class="service-icon-wrap">📝</div><div class="service-name">OnlyOffice</div><div class="service-desc">Suite bureautique — docs, tableurs, présentations</div><div class="service-link">Accéder →</div></a>
+    </div>
+  </div>
+</section>
+
+<!-- MANUEL -->
+<section id="manuel" class="section section-alt">
+  <div class="container">
+    <div class="section-header reveal">
+      <div class="section-eyebrow">Documentation</div>
+      <h2 class="section-title">Manuel de l'employé</h2>
+      <p class="section-sub">Tout ce que vous devez savoir pour travailler efficacement.</p>
+    </div>
+    <div class="manuel-layout">
+      <div class="manuel-nav reveal">
+        <div class="manuel-nav-title">📚 Sections</div>
+        <div class="manuel-nav-item active" onclick="showManuel('securite', this)"><span class="manuel-nav-icon">🛡️</span> Sécurité & Accès</div>
+        <div class="manuel-nav-item" onclick="showManuel('outils', this)"><span class="manuel-nav-icon">💻</span> Outils de travail</div>
+        <div class="manuel-nav-item" onclick="showManuel('regles', this)"><span class="manuel-nav-icon">📌</span> Règles & Pratiques</div>
+        <div class="manuel-nav-item" onclick="showManuel('communication', this)"><span class="manuel-nav-icon">🌐</span> Communication</div>
+        <div class="manuel-nav-item" onclick="showManuel('it', this)"><span class="manuel-nav-icon">🔧</span> Support IT</div>
+      </div>
+      <div class="manuel-content reveal">
+        <div class="manuel-panel active" id="panel-securite">
+          <div class="manuel-panel-header"><div class="manuel-panel-icon">🛡️</div><div><div class="manuel-panel-title">Sécurité & Accès</div><div class="manuel-panel-sub">Règles de sécurité informatique</div></div></div>
+          <div class="manuel-panel-body">
+            <div class="manuel-rule"><div class="manuel-rule-num">1</div><div><div class="manuel-rule-title">Identifiants LDAP uniques</div><div class="manuel-rule-text">Un seul compte LDAP donne accès à tous les services. Ne partagez jamais vos identifiants. En cas de compromission, contactez immédiatement le DSI à <code>dsi@seimp.local</code>.</div></div></div>
+            <div class="manuel-rule"><div class="manuel-rule-num">2</div><div><div class="manuel-rule-title">VPN obligatoire en télétravail</div><div class="manuel-rule-text">Toute connexion depuis l'extérieur doit passer par le VPN WireGuard. Serveur : <code>192.168.20.23</code>. Configuration fournie par le DSI.</div></div></div>
+            <div class="manuel-rule"><div class="manuel-rule-num">3</div><div><div class="manuel-rule-title">Gestionnaire de mots de passe</div><div class="manuel-rule-text">Utilisez Vaultwarden pour tous vos mots de passe professionnels. Disponible sur <code>192.168.20.34</code> et en extension navigateur. Aucun mot de passe noté sur papier ou stocké en clair.</div></div></div>
+            <div class="manuel-rule"><div class="manuel-rule-num">4</div><div><div class="manuel-rule-title">Signalement d'incidents</div><div class="manuel-rule-text">Toute anomalie de sécurité (comportement suspect, accès non autorisé, malware) doit être remontée immédiatement au RSSI via <code>securite@seimp.local</code>.</div></div></div>
+            <div class="manuel-rule"><div class="manuel-rule-num">5</div><div><div class="manuel-rule-title">Verrouillage de session</div><div class="manuel-rule-text">Verrouillez votre poste à chaque absence, même courte. Raccourci : <code>Win+L</code> (Windows) ou <code>Ctrl+Alt+L</code> (Linux).</div></div></div>
+          </div>
+        </div>
+        <div class="manuel-panel" id="panel-outils">
+          <div class="manuel-panel-header"><div class="manuel-panel-icon">💻</div><div><div class="manuel-panel-title">Outils de travail</div><div class="manuel-panel-sub">Services et applications professionnels</div></div></div>
+          <div class="manuel-panel-body">
+            <div class="manuel-rule"><div class="manuel-rule-num">1</div><div><div class="manuel-rule-title">Nextcloud — stockage officiel</div><div class="manuel-rule-text">Tous les fichiers professionnels doivent être sur Nextcloud <code>192.168.20.11</code>. Aucun Google Drive, Dropbox ou WeTransfer pour les données internes.</div></div></div>
+            <div class="manuel-rule"><div class="manuel-rule-num">2</div><div><div class="manuel-rule-title">OnlyOffice — édition documentaire</div><div class="manuel-rule-text">Éditez vos documents directement depuis Nextcloud via OnlyOffice <code>192.168.20.31</code>. Compatible .docx, .xlsx, .pptx.</div></div></div>
+            <div class="manuel-rule"><div class="manuel-rule-num">3</div><div><div class="manuel-rule-title">Plane — gestion des tâches</div><div class="manuel-rule-text">Toutes les tâches et projets sont tracés sur Plane <code>192.168.20.38</code>. Pour tout incident, créez un ticket et assignez-le à votre responsable.</div></div></div>
+            <div class="manuel-rule"><div class="manuel-rule-num">4</div><div><div class="manuel-rule-title">Jitsi Meet — réunions vidéo</div><div class="manuel-rule-text">Priorité à Jitsi <code>192.168.20.35</code> pour toutes les réunions. Réunion hebdomadaire chaque lundi à 9h00. Lien fixe dans le Wiki.</div></div></div>
+          </div>
+        </div>
+        <div class="manuel-panel" id="panel-regles">
+          <div class="manuel-panel-header"><div class="manuel-panel-icon">📌</div><div><div class="manuel-panel-title">Règles & Bonnes pratiques</div><div class="manuel-panel-sub">Politiques internes et standards</div></div></div>
+          <div class="manuel-panel-body">
+            <div class="manuel-rule"><div class="manuel-rule-num">1</div><div><div class="manuel-rule-title">Confidentialité des données</div><div class="manuel-rule-text">Les données clients et internes ne quittent jamais les serveurs SEIMP. Toute communication externe de données doit être approuvée par la direction.</div></div></div>
+            <div class="manuel-rule"><div class="manuel-rule-num">2</div><div><div class="manuel-rule-title">Convention de nommage</div><div class="manuel-rule-text">Format obligatoire : <code>AAAA-MM-JJ_projet_description_v1</code>. Exemple : <code>2025-01-15_seimp_rapport-audit_v2</code>.</div></div></div>
+            <div class="manuel-rule"><div class="manuel-rule-num">3</div><div><div class="manuel-rule-title">Sauvegardes automatiques</div><div class="manuel-rule-text">Le serveur backup <code>192.168.20.21</code> effectue des sauvegardes nocturnes automatiques. Conservation : 30 jours. Pour toute restauration, contactez le DSI.</div></div></div>
+            <div class="manuel-rule"><div class="manuel-rule-num">4</div><div><div class="manuel-rule-title">Documentation obligatoire</div><div class="manuel-rule-text">Toute nouvelle procédure, configuration ou processus doit être documenté sur le Wiki <code>192.168.20.32</code> dans les 48h suivant sa mise en place.</div></div></div>
+          </div>
+        </div>
+        <div class="manuel-panel" id="panel-communication">
+          <div class="manuel-panel-header"><div class="manuel-panel-icon">🌐</div><div><div class="manuel-panel-title">Communication</div><div class="manuel-panel-sub">Canaux et pratiques de communication</div></div></div>
+          <div class="manuel-panel-body">
+            <div class="manuel-rule"><div class="manuel-rule-num">1</div><div><div class="manuel-rule-title">Email professionnel exclusif</div><div class="manuel-rule-text">Utilisez uniquement Mailcow <code>192.168.20.30</code> pour les échanges professionnels. Configurez votre client IMAP/SMTP selon le guide dans le Wiki.</div></div></div>
+            <div class="manuel-rule"><div class="manuel-rule-num">2</div><div><div class="manuel-rule-title">Réunion hebdomadaire</div><div class="manuel-rule-text">Chaque lundi à 9h00 sur Jitsi. Présence obligatoire sauf absence justifiée. Ordre du jour publié sur Plane le vendredi précédent.</div></div></div>
+            <div class="manuel-rule"><div class="manuel-rule-num">3</div><div><div class="manuel-rule-title">Délais de réponse</div><div class="manuel-rule-text">Email interne : réponse sous 4h ouvrables. Urgences : email + appel téléphonique direct. Incidents critiques : immédiat via DSI et RSSI.</div></div></div>
+          </div>
+        </div>
+        <div class="manuel-panel" id="panel-it">
+          <div class="manuel-panel-header"><div class="manuel-panel-icon">🔧</div><div><div class="manuel-panel-title">Support IT</div><div class="manuel-panel-sub">Comment obtenir de l'aide technique</div></div></div>
+          <div class="manuel-panel-body">
+            <div class="manuel-rule"><div class="manuel-rule-num">1</div><div><div class="manuel-rule-title">Ticket Plane en priorité</div><div class="manuel-rule-text">Pour tout problème technique, ouvrez d'abord un ticket sur Plane <code>192.168.20.38</code>. Sélectionnez le projet "Support IT" et catégorisez votre demande.</div></div></div>
+            <div class="manuel-rule"><div class="manuel-rule-num">2</div><div><div class="manuel-rule-title">Niveaux d'urgence</div><div class="manuel-rule-text"><strong>P1 Critique</strong> (service inaccessible) → DSI immédiat. <strong>P2 Majeur</strong> (gêne importante) → ticket + email. <strong>P3 Mineur</strong> → ticket uniquement.</div></div></div>
+            <div class="manuel-rule"><div class="manuel-rule-num">3</div><div><div class="manuel-rule-title">Monitoring Wazuh</div><div class="manuel-rule-text">Le SIEM Wazuh <code>192.168.20.22</code> surveille l'ensemble de l'infrastructure 24/7. Les alertes sont automatiquement remontées à l'équipe sécurité.</div></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ONBOARDING -->
+<section id="onboarding" class="section">
+  <div class="container">
+    <div class="section-header reveal">
+      <div class="section-eyebrow">Premiers pas</div>
+      <h2 class="section-title">Votre plan d'onboarding</h2>
+      <p class="section-sub">Suivez ces étapes pour être pleinement opérationnel en une semaine.</p>
+    </div>
+    <div class="onboarding-grid">
+      <div class="onboarding-step reveal">
+        <div class="onboarding-step-num">1</div>
+        <div class="onboarding-day">Jour 1 — Matin</div>
+        <div class="onboarding-title">Configuration des accès</div>
+        <ul class="onboarding-tasks">
+          <li>Récupérer vos <strong>identifiants LDAP</strong> auprès du DSI</li>
+          <li>Se connecter à <strong>Nextcloud</strong> et changer le mot de passe</li>
+          <li>Configurer <strong>Mailcow</strong> sur votre client email</li>
+          <li>Créer votre coffre sur <strong>Vaultwarden</strong></li>
+          <li>Rejoindre <strong>Plane</strong> et intégrer votre équipe</li>
+        </ul>
+      </div>
+      <div class="onboarding-step reveal">
+        <div class="onboarding-step-num">2</div>
+        <div class="onboarding-day">Jour 1 — Après-midi</div>
+        <div class="onboarding-title">Découverte des outils</div>
+        <ul class="onboarding-tasks">
+          <li>Parcourir le <strong>Wiki</strong> — procédures internes</li>
+          <li>Rejoindre votre premier <strong>projet Plane</strong></li>
+          <li>Tester une <strong>réunion Jitsi</strong> avec votre manager</li>
+          <li>Explorer <strong>Metabase</strong> — dashboards de votre équipe</li>
+          <li>Lire la <strong>politique de sécurité</strong> dans le Wiki</li>
+        </ul>
+      </div>
+      <div class="onboarding-step reveal">
+        <div class="onboarding-step-num">3</div>
+        <div class="onboarding-day">Jours 2 – 3</div>
+        <div class="onboarding-title">Formation Odoo</div>
+        <ul class="onboarding-tasks">
+          <li>Formation sur le <strong>module de votre poste</strong></li>
+          <li>Saisir vos informations dans <strong>Odoo RH</strong></li>
+          <li>Tester la <strong>demande de congés</strong></li>
+          <li>Vérification des accès avec votre <strong>responsable</strong></li>
+          <li>Parcourir les <strong>n8n workflows</strong> de votre équipe</li>
+        </ul>
+      </div>
+      <div class="onboarding-step reveal">
+        <div class="onboarding-step-num">4</div>
+        <div class="onboarding-day">Jours 4 – 5</div>
+        <div class="onboarding-title">Intégration complète</div>
+        <ul class="onboarding-tasks">
+          <li>Réunion de <strong>bilan d'intégration</strong> avec le manager</li>
+          <li>Configurer le <strong>VPN</strong> si télétravail partiel</li>
+          <li>Ajouter votre première <strong>page au Wiki</strong></li>
+          <li>Installation du <strong>client Vaultwarden</strong> sur mobile</li>
+          <li>Vous êtes <strong>pleinement opérationnel !</strong> 🎉</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ACTUALITES -->
+<section id="actualites" class="section section-alt">
+  <div class="container">
+    <div class="section-header reveal">
+      <div class="section-eyebrow">Actualités</div>
+      <h2 class="section-title">Dernières nouvelles</h2>
+      <p class="section-sub">Restez informé des dernières mises à jour et annonces internes.</p>
+    </div>
+    <div class="news-grid reveal">
+      <div class="news-main">
+        <div class="news-img">
+          <div class="news-img-content">
+            <div class="news-img-icon">🚀</div>
+            <div class="news-img-title">Mise à jour infrastructure</div>
+          </div>
+        </div>
+        <div class="news-body">
+          <div class="news-tag">Annonce</div>
+          <div class="news-title">Migration réussie vers VMware — Infrastructure SEIMP v2.0</div>
+          <div class="news-text">L'ensemble de l'infrastructure SEIMP a été migré avec succès vers VMware. 17 services sont désormais disponibles sur le nouveau réseau 192.168.20.x. Les performances ont été améliorées et la stabilité renforcée.</div>
+          <div class="news-date">Aujourd'hui — Équipe DSI</div>
+        </div>
+      </div>
+      <div class="news-sidebar">
+        <div class="news-item">
+          <div class="news-item-tag">Maintenance</div>
+          <div class="news-item-title">Maintenance Mailcow — Dimanche 02h-04h</div>
+          <div class="news-item-date">Cette semaine</div>
+        </div>
+        <div class="news-item">
+          <div class="news-item-tag">Formation</div>
+          <div class="news-item-title">Session Odoo RH — Jeudi 14h sur Jitsi</div>
+          <div class="news-item-date">Jeudi prochain</div>
+        </div>
+        <div class="news-item">
+          <div class="news-item-tag">Sécurité</div>
+          <div class="news-item-title">Rappel : VPN obligatoire dès le télétravail</div>
+          <div class="news-item-date">Il y a 2 jours</div>
+        </div>
+        <div class="news-item">
+          <div class="news-item-tag">Nouveau</div>
+          <div class="news-item-title">Portail employé disponible sur 192.168.20.40</div>
+          <div class="news-item-date">Aujourd'hui</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CONTACTS -->
+<section id="contacts" class="section">
+  <div class="container">
+    <div class="section-header reveal">
+      <div class="section-eyebrow">Équipe</div>
+      <h2 class="section-title">Vos contacts clés</h2>
+      <p class="section-sub">Des questions ? Ces personnes sont là pour vous aider.</p>
+    </div>
+    <div class="contacts-grid">
+      <div class="contact-card reveal">
+        <div class="contact-avatar">👨‍💼</div>
+        <div class="contact-name">Direction</div>
+        <div class="contact-role">Management</div>
+        <div class="contact-email">direction@seimp.local</div>
+      </div>
+      <div class="contact-card reveal">
+        <div class="contact-avatar">🛠️</div>
+        <div class="contact-name">DSI / IT</div>
+        <div class="contact-role">Support Technique</div>
+        <div class="contact-email">dsi@seimp.local</div>
+      </div>
+      <div class="contact-card reveal">
+        <div class="contact-avatar">👥</div>
+        <div class="contact-name">Ressources Humaines</div>
+        <div class="contact-role">RH & Onboarding</div>
+        <div class="contact-email">rh@seimp.local</div>
+      </div>
+      <div class="contact-card reveal">
+        <div class="contact-avatar">🔒</div>
+        <div class="contact-name">Sécurité</div>
+        <div class="contact-role">RSSI</div>
+        <div class="contact-email">securite@seimp.local</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="container">
+    <div class="footer-grid">
+      <div class="footer-brand">
+        <div class="nav-logo-mark" style="margin-bottom:16px;">S</div>
+        <div class="footer-brand-name">SEIMP</div>
+        <div class="footer-brand-sub">Système d'Entreprise Intégré Multi-Plateforme. Infrastructure auto-hébergée sécurisée.</div>
+      </div>
+      <div>
+        <div class="footer-col-title">Services</div>
+        <ul class="footer-links">
+          <li><a href="http://192.168.20.32" target="_blank">Wiki</a></li>
+          <li><a href="http://192.168.20.11" target="_blank">Nextcloud</a></li>
+          <li><a href="http://192.168.20.12" target="_blank">Odoo</a></li>
+          <li><a href="http://192.168.20.35" target="_blank">Jitsi</a></li>
+          <li><a href="http://192.168.20.38" target="_blank">Plane</a></li>
+        </ul>
+      </div>
+      <div>
+        <div class="footer-col-title">Ressources</div>
+        <ul class="footer-links">
+          <li><a href="#manuel">Manuel employé</a></li>
+          <li><a href="#onboarding">Onboarding</a></li>
+          <li><a href="http://192.168.20.32" target="_blank">Documentation</a></li>
+          <li><a href="http://192.168.20.34" target="_blank">Vaultwarden</a></li>
+        </ul>
+      </div>
+      <div>
+        <div class="footer-col-title">Contact</div>
+        <ul class="footer-links">
+          <li><a href="#">dsi@seimp.local</a></li>
+          <li><a href="#">rh@seimp.local</a></li>
+          <li><a href="#">securite@seimp.local</a></li>
+          <li><a href="http://192.168.20.38" target="_blank">Ouvrir un ticket</a></li>
+        </ul>
+      </div>
+    </div>
+    <hr class="footer-divider">
+    <div class="footer-bottom">
+      <div class="footer-copy">© 2025 SEIMP — Usage interne uniquement</div>
+      <div class="footer-badges">
+        <span class="footer-badge">17 services</span>
+        <span class="footer-badge">Ubuntu 22.04</span>
+        <span class="footer-badge">VMware</span>
+        <span class="footer-badge">Ansible</span>
+      </div>
+    </div>
+  </div>
+</footer>
+
+<!-- CHATBOT -->
+<button id="chat-fab" onclick="toggleChat()">
+  💬 <div class="badge">1</div>
+</button>
+<div id="chat-window">
+  <div class="chat-head">
+    <div class="chat-head-avatar">🤖</div>
+    <div><div class="chat-head-name">Assistant SEIMP</div><div class="chat-head-status">En ligne</div></div>
+    <button class="chat-head-close" onclick="toggleChat()">✕</button>
+  </div>
+  <div class="chat-body" id="chat-body"></div>
+  <div class="chat-chips" id="chat-chips">
+    <span class="chip" onclick="chipClick(this)">🔑 Mes accès</span>
+    <span class="chip" onclick="chipClick(this)">📋 Onboarding</span>
+    <span class="chip" onclick="chipClick(this)">🛠️ Support IT</span>
+    <span class="chip" onclick="chipClick(this)">📖 Wiki</span>
+    <span class="chip" onclick="chipClick(this)">📧 Email</span>
+    <span class="chip" onclick="chipClick(this)">🔐 VPN</span>
+    <span class="chip" onclick="chipClick(this)">📅 Congés</span>
+    <span class="chip" onclick="chipClick(this)">💾 Backup</span>
+  </div>
+  <div class="chat-foot">
+    <textarea class="chat-input" id="chat-in" placeholder="Votre question..." rows="1" onkeydown="chatKey(event)" oninput="chatResize(this)"></textarea>
+    <button class="chat-send" onclick="chatSend()">➤</button>
+  </div>
+</div>
+
+<script>
+// ── CLOCK ──
+function updateClock() {
+  const now = new Date();
+  document.getElementById('nav-clock').textContent = now.toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'});
+  document.getElementById('status-date').textContent = now.toLocaleDateString('fr-FR', {weekday:'long', day:'numeric', month:'long', year:'numeric'});
+}
+updateClock(); setInterval(updateClock, 1000);
+
+// ── SCROLL REVEAL ──
+const ro = new IntersectionObserver(entries => {
+  entries.forEach((e, i) => {
+    if (e.isIntersecting) { setTimeout(() => e.target.classList.add('vis'), i * 70); ro.unobserve(e.target); }
+  });
+}, {threshold: 0.08});
+document.querySelectorAll('.reveal').forEach(el => ro.observe(el));
+
+// ── PROGRESS ANIMATION ──
+setTimeout(() => { document.getElementById('prog-bar').style.width = '25%'; }, 500);
+
+// ── SEARCH ──
+function doSearch() {
+  const q = document.getElementById('search-input').value.trim().toLowerCase();
+  if (!q) return;
+  const map = {
+    'nextcloud': 'http://192.168.20.11', 'fichier': 'http://192.168.20.11',
+    'odoo': 'http://192.168.20.12', 'conge': 'http://192.168.20.12',
+    'wiki': 'http://192.168.20.32', 'doc': 'http://192.168.20.32',
+    'jitsi': 'http://192.168.20.35', 'reunion': 'http://192.168.20.35',
+    'plane': 'http://192.168.20.38', 'tache': 'http://192.168.20.38',
+    'mail': 'http://192.168.20.30', 'email': 'http://192.168.20.30',
+    'metabase': 'http://192.168.20.36', 'dashboard': 'http://192.168.20.36',
+    'vault': 'http://192.168.20.34', 'password': 'http://192.168.20.34',
+    'n8n': 'http://192.168.20.37', 'auto': 'http://192.168.20.37',
+  };
+  for (const [k, v] of Object.entries(map)) {
+    if (q.includes(k)) { window.open(v, '_blank'); return; }
+  }
+  document.querySelector('#manuel').scrollIntoView({behavior:'smooth'});
+}
+function searchFill(v) { document.getElementById('search-input').value = v; }
+document.getElementById('search-input').addEventListener('keydown', e => { if (e.key === 'Enter') doSearch(); });
+
+// ── MANUEL TABS ──
+function showManuel(id, el) {
+  document.querySelectorAll('.manuel-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.manuel-nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('panel-' + id).classList.add('active');
+  el.classList.add('active');
+}
+
+// ── CHATBOT ──
+let chatOpen = false;
+const KB = {
+  "acces|identifiant|ldap|login|compte": "Vos identifiants LDAP ont été remis par le DSI lors de votre arrivée. Un seul compte donne accès à tous les services SEIMP.<br><br>Perdu vos accès ? Contactez <strong>dsi@seimp.local</strong>.<br>Stockez vos mots de passe sur <a href='http://192.168.20.34' target='_blank'>Vaultwarden →</a>",
+  "wiki|documentation|procedure|procédure|guide": "Le Wiki BookStack centralise toute la documentation interne.<br><br><a href='http://192.168.20.32' target='_blank'>Accéder au Wiki →</a><br><br>Vous y trouverez les procédures, guides techniques, politiques et tutoriels.",
+  "nextcloud|fichier|stockage|drive|cloud": "Nextcloud est le stockage officiel de SEIMP.<br><br><a href='http://192.168.20.11' target='_blank'>Accéder à Nextcloud →</a><br><br>Tous les fichiers professionnels doivent y être stockés. Aucun Google Drive ou Dropbox.",
+  "jitsi|réunion|reunion|visio|vidéo|video|appel": "Jitsi Meet est disponible pour toutes les réunions.<br><br><a href='http://192.168.20.35' target='_blank'>Rejoindre Jitsi →</a><br><br>Réunion hebdomadaire : <strong>lundi à 9h00</strong>.",
+  "odoo|erp|rh|conge|congé|paie|salaire|note de frais": "Odoo gère tous les processus RH et ERP.<br><br><a href='http://192.168.20.12' target='_blank'>Accéder à Odoo →</a><br><br>Congés, notes de frais, informations personnelles. Connectez-vous avec vos identifiants LDAP.",
+  "plane|projet|tache|tâche|ticket|issue|bug": "Plane gère tous les projets et tâches.<br><br><a href='http://192.168.20.38' target='_blank'>Accéder à Plane →</a><br><br>Toutes les tâches doivent y être tracées. Pour un incident, créez un ticket dans le projet 'Support IT'.",
+  "email|mail|messagerie|mailcow|boite|boîte": "Mailcow gère votre messagerie professionnelle.<br><br><a href='http://192.168.20.30' target='_blank'>Accéder à Mailcow →</a><br><br>Configurez votre client email avec les paramètres IMAP/SMTP disponibles dans le Wiki.",
+  "vpn|teletravail|télétravail|remote|distant|exterieur|extérieur": "Le VPN WireGuard est <strong>obligatoire</strong> en télétravail.<br><br>Contactez le DSI pour recevoir votre fichier de configuration.<br>📧 <strong>dsi@seimp.local</strong><br>Serveur : <code>192.168.20.23</code>",
+  "metabase|dashboard|tableau de bord|stats|statistique|données|donnees": "Metabase héberge tous les tableaux de bord métier.<br><br><a href='http://192.168.20.36' target='_blank'>Accéder à Metabase →</a><br><br>Analyses, KPIs et rapports de votre équipe.",
+  "n8n|automatisation|workflow|integration": "n8n gère les automatisations et intégrations entre services.<br><br><a href='http://192.168.20.37' target='_blank'>Accéder à n8n →</a><br><br>Accès réservé aux équipes techniques.",
+  "onboarding|demarrer|démarrer|premier jour|commencer|integration|intégration": "Votre plan d'onboarding en 4 étapes :<br><br>📅 <strong>Jour 1 matin</strong> — Configuration accès LDAP<br>🔍 <strong>Jour 1 après-midi</strong> — Découverte Wiki + Plane<br>📚 <strong>Jours 2-3</strong> — Formation Odoo<br>✅ <strong>Jours 4-5</strong> — Intégration complète + VPN<br><br><a href='#onboarding'>Voir le plan détaillé →</a>",
+  "support|aide|probleme|problème|it|dsi|incident": "Pour toute assistance technique :<br><br>🎫 Ticket sur <a href='http://192.168.20.38' target='_blank'>Plane</a> (projet Support IT)<br>📧 Email : <strong>dsi@seimp.local</strong><br><br>Urgence critique : email + appel direct au DSI.",
+  "vault|vaultwarden|password|mot de passe": "Vaultwarden est votre gestionnaire de mots de passe.<br><br><a href='http://192.168.20.34' target='_blank'>Accéder à Vaultwarden →</a><br><br>Disponible aussi en extension navigateur. Stockez-y TOUS vos mots de passe professionnels.",
+  "backup|sauvegarde|restauration": "Les sauvegardes sont automatiques chaque nuit.<br><br>Serveur backup : <code>192.168.20.21</code><br>Conservation : 30 jours<br><br>Pour une restauration, contactez le DSI : <strong>dsi@seimp.local</strong>",
+  "conge|congé|vacances|absences": "Gérez vos congés depuis Odoo RH.<br><br><a href='http://192.168.20.12' target='_blank'>Accéder à Odoo →</a><br><br>Menu : Congés → Nouvelle demande. La validation est effectuée par votre manager sous 24h.",
+};
+
+function getBotResp(msg) {
+  const l = msg.toLowerCase();
+  for (const [k, v] of Object.entries(KB)) {
+    if (k.split('|').some(w => l.includes(w))) return v;
+  }
+  return `Je n'ai pas trouvé de réponse précise pour "<em>${msg}</em>".<br><br>Essayez : accès, Wiki, Nextcloud, Odoo, Plane, email, VPN, support...<br><br>Ou contactez le DSI : <strong>dsi@seimp.local</strong>`;
+}
+
+function toggleChat() {
+  chatOpen = !chatOpen;
+  document.getElementById('chat-window').classList.toggle('open', chatOpen);
+  document.querySelector('#chat-fab .badge').style.display = chatOpen ? 'none' : 'flex';
+  if (chatOpen && !document.getElementById('chat-body').children.length) {
+    setTimeout(() => addBot("Bonjour et <strong>bienvenue dans l'équipe SEIMP !</strong> 👋<br><br>Je suis votre assistant. Je peux vous aider sur les accès, les outils, l'onboarding et toutes les procédures internes.<br><br>Comment puis-je vous aider ?"), 350);
+  }
+}
+
+function addBot(html) {
+  const body = document.getElementById('chat-body');
+  const typing = document.createElement('div');
+  typing.className = 'cmsg bot';
+  typing.innerHTML = '<div class="cmsg-av">🤖</div><div class="typing-ind"><span></span><span></span><span></span></div>';
+  body.appendChild(typing); body.scrollTop = 99999;
+  setTimeout(() => {
+    typing.remove();
+    const m = document.createElement('div');
+    m.className = 'cmsg bot';
+    m.innerHTML = '<div class="cmsg-av">🤖</div><div class="cmsg-bubble">' + html + '</div>';
+    body.appendChild(m); body.scrollTop = 99999;
+  }, 800 + Math.random() * 500);
+}
+
+function addUser(text) {
+  const body = document.getElementById('chat-body');
+  const m = document.createElement('div');
+  m.className = 'cmsg usr';
+  m.innerHTML = '<div class="cmsg-av">👤</div><div class="cmsg-bubble">' + text + '</div>';
+  body.appendChild(m); body.scrollTop = 99999;
+  document.getElementById('chat-chips').style.display = 'none';
+}
+
+function chatSend() {
+  const inp = document.getElementById('chat-in');
+  const t = inp.value.trim(); if (!t) return;
+  addUser(t); inp.value = ''; inp.style.height = 'auto';
+  setTimeout(() => addBot(getBotResp(t)), 80);
+}
+
+function chipClick(el) {
+  const map = {'🔑 Mes accès':'accès ldap','📋 Onboarding':'onboarding','🛠️ Support IT':'support it','📖 Wiki':'wiki','📧 Email':'email','🔐 VPN':'vpn','📅 Congés':'congé','💾 Backup':'backup'};
+  const q = map[el.textContent] || el.textContent;
+  addUser(el.textContent);
+  document.getElementById('chat-chips').style.display = 'none';
+  setTimeout(() => addBot(getBotResp(q)), 80);
+}
+
+function chatKey(e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); chatSend(); } }
+function chatResize(el) { el.style.height = 'auto'; el.style.height = Math.min(el.scrollHeight, 80) + 'px'; }
+</script>
+</body>
+</html>

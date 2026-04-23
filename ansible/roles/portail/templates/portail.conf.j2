@@ -1,0 +1,14 @@
+server {
+    listen 80;
+    server_name 192.168.20.40 portail.seimp.local;
+
+    root /var/www/portail;
+    index index.html;
+
+    location / {
+        try_files $uri $uri/ =404;
+    }
+
+    access_log /var/log/nginx/portail_access.log;
+    error_log  /var/log/nginx/portail_error.log;
+}

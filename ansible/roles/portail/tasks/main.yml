@@ -1,0 +1,53 @@
+---
+- name: Mettre à jour les paquets
+  apt:
+    update_cache: yes
+    upgrade: dist
+
+- name: Installer nginx
+  apt:
+    name: nginx
+    state: present
+
+- name: Créer le répertoire du site
+  file:
+    path: /var/www/portail
+    state: directory
+    owner: www-data
+    group: www-data
+    mode: '0755'
+
+- name: Déployer le fichier HTML du portail
+  copy:
+    src: bienvenue.html
+    dest: /var/www/portail/index.html
+    owner: www-data
+    group: www-data
+    mode: '0644'
+  notify: Redémarrer nginx
+
+- name: Déployer la configuration nginx
+  template:
+    src: portail.conf.j2
+    dest: /etc/nginx/sites-available/portail
+    mode: '0644'
+  notify: Redémarrer nginx
+
+- name: Activer le site nginx
+  file:
+    src: /etc/nginx/sites-available/portail
+    dest: /etc/nginx/sites-enabled/portail
+    state: link
+  notify: Redémarrer nginx
+
+- name: Désactiver le site nginx par défaut
+  file:
+    path: /etc/nginx/sites-enabled/default
+    state: absent
+  notify: Redémarrer nginx
+
+- name: S'assurer que nginx est démarré et activé
+  service:
+    name: nginx
+    state: started
+    enabled: yes

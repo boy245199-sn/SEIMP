@@ -110,3 +110,10 @@
   roles:
     - plane
   tags: plane
+
+- name: Installation du Portail d'accueil
+  hosts: portail_servers
+  become: yes
+  roles:
+    - portail
+  tags: portail
