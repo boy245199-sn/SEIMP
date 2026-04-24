@@ -1,262 +1,236 @@
 ---
+- name: Nettoyage complet avant installation
+  block:
+
+    - name: Supprimer le service systemd
+      file:
+        path: /etc/systemd/system/odoo.service
+        state: absent
+      ignore_errors: yes
+
+    - name: Supprimer le répertoire Odoo
+      file:
+        path: /opt/odoo
+        state: absent
+      ignore_errors: yes
+
+    - name: Supprimer le fichier de configuration
+      file:
+        path: /etc/odoo.conf
+        state: absent
+      ignore_errors: yes
+
+    - name: Supprimer les logs
+      file:
+        path: /var/log/odoo
+        state: absent
+      ignore_errors: yes
+
+    - name: Supprimer la base de données Leuz
+      shell: |
+        sudo -u postgres psql -c "DROP DATABASE IF EXISTS Leuz;" 2>/dev/null || true
+        sudo -u postgres psql -c "DROP DATABASE IF EXISTS odoo;" 2>/dev/null || true
+        sudo -u postgres psql -c "DROP USER IF EXISTS odoo;" 2>/dev/null || true
+      ignore_errors: yes
+
 - name: Mise à jour des paquets
   apt:
     update_cache: yes
     cache_valid_time: 3600
 
-- name: Installer software-properties-common
-  apt:
-    name: software-properties-common
-    state: present
-
-- name: Installer unzip et outils
+- name: Installer dépendances système
   apt:
     name:
-      - unzip
-      - wget
-      - curl
-    state: present
-
-- name: Ajouter le dépôt PHP 8.2
-  apt_repository:
-    repo: ppa:ondrej/php
-    state: present
-    update_cache: yes
-
-- name: Installation des dépendances PHP 8.2
-  apt:
-    name:
-      - apache2
-      - mariadb-server
-      - mariadb-client
-      - php8.2
-      - php8.2-cli
-      - php8.2-common
-      - php8.2-curl
-      - php8.2-gd
-      - php8.2-intl
-      - php8.2-mbstring
-      - php8.2-mysql
-      - php8.2-xml
-      - php8.2-zip
-      - php8.2-bcmath
-      - php8.2-gmp
-      - php8.2-ldap
-      - php8.2-bz2
-      - php8.2-imagick
-      - php8.2-redis
-      - libapache2-mod-php8.2
+      - python3.11
+      - python3.11-dev
+      - python3.11-venv
       - python3-pip
+      - postgresql
+      - postgresql-contrib
+      - nodejs
+      - npm
+      - sassc
+      - git
+      - curl
+      - wget
+      - unzip
+      - build-essential
+      - libssl-dev
+      - libffi-dev
+      - libxml2-dev
+      - libxslt1-dev
+      - libjpeg-dev
+      - libpq-dev
+      - libldap2-dev
+      - libsasl2-dev
+      - python3-dev
     state: present
 
-- name: Installer PyMySQL pour Ansible
-  pip:
-    name: PyMySQL
+- name: Installer rtlcss
+  npm:
+    name: rtlcss
+    global: yes
     state: present
-    executable: pip3
 
-- name: Arrêter Apache
-  systemd:
-    name: apache2
-    state: stopped
+- name: Créer utilisateur odoo
+  user:
+    name: odoo
+    shell: /bin/bash
+    home: /opt/odoo
+    system: yes
 
-- name: Supprimer l'ancienne installation
-  shell: |
-    rm -rf /var/www/html/nextcloud
-    rm -rf /var/www/html/nextcloud_backup
-    rm -f /tmp/nextcloud.zip
-    mysql -e "DROP DATABASE IF EXISTS nextcloud" 2>/dev/null || true
-    mysql -e "DROP USER IF EXISTS 'nextcloud_user'@'localhost'" 2>/dev/null || true
-  ignore_errors: yes
-
-- name: Recréer la base de données
-  mysql_db:
-    name: nextcloud
-    state: present
-    login_unix_socket: /var/run/mysqld/mysqld.sock
-
-- name: Recréer l'utilisateur MySQL
-  mysql_user:
-    name: nextcloud_user
-    password: nextcloud_pass
-    priv: 'nextcloud.*:ALL'
-    state: present
-    login_unix_socket: /var/run/mysqld/mysqld.sock
-
-- name: Télécharger la dernière version de Nextcloud
-  get_url:
-    url: https://download.nextcloud.com/server/releases/latest.zip
-    dest: /tmp/nextcloud.zip
-    timeout: 300
-
-- name: Décompresser Nextcloud
-  unarchive:
-    src: /tmp/nextcloud.zip
-    dest: /var/www/html/
-    remote_src: yes
-    owner: www-data
-    group: www-data
-
-- name: Créer le répertoire data
+- name: Créer répertoire Odoo
   file:
-    path: /var/www/html/nextcloud/data
+    path: /opt/odoo
     state: directory
-    owner: www-data
-    group: www-data
-    mode: 0750
+    owner: odoo
+    group: odoo
+    mode: "0755"
 
-- name: Créer la configuration Apache
+- name: Augmenter buffer git
+  command: git config --global http.postBuffer 524288000
+
+- name: Forcer git en HTTP/1.1
+  command: git config --global http.version HTTP/1.1
+
+- name: Supprimer repo incomplet si présent
+  file:
+    path: /opt/odoo/odoo-17
+    state: absent
+
+- name: Cloner Odoo 17 (robuste avec retry)
+  git:
+    repo: https://github.com/odoo/odoo.git
+    dest: /opt/odoo/odoo-17
+    version: 17.0
+    depth: 1
+    single_branch: yes
+  register: git_clone
+  retries: 5
+  delay: 20
+  until: git_clone is succeeded
+
+- name: Créer virtualenv
+  command: python3.11 -m venv /opt/odoo/venv
+
+- name: Fix permissions venv
+  file:
+    path: /opt/odoo/venv
+    owner: odoo
+    group: odoo
+    recurse: yes
+
+- name: Mettre à jour pip
+  command: /opt/odoo/venv/bin/pip install --upgrade pip
+
+- name: Installer wheel
+  command: /opt/odoo/venv/bin/pip install wheel
+
+- name: Installer dépendances minimales
+  command: >
+    /opt/odoo/venv/bin/pip install --default-timeout=300
+    psycopg2-binary
+    "lxml>=5.0"
+    lxml_html_clean
+    Pillow
+    reportlab
+
+- name: Installer python-ldap séparément
+  command: /opt/odoo/venv/bin/pip install python-ldap
+  register: ldap_install
+  retries: 3
+  delay: 20
+  until: ldap_install.rc == 0
+
+- name: Installer dépendances complémentaires
+  command: >
+    /opt/odoo/venv/bin/pip install --default-timeout=300
+    babel chardet decorator docutils gevent greenlet Jinja2 MarkupSafe
+    num2words passlib polib psutil pydot pyopenssl PyPDF2 pyserial
+    python-dateutil python-stdnum pytz pyusb qrcode requests rjsmin
+    urllib3 vobject Werkzeug xlrd XlsxWriter xlwt zeep
+  ignore_errors: yes
+
+- name: Fix permissions globales
+  file:
+    path: /opt/odoo
+    owner: odoo
+    group: odoo
+    recurse: yes
+
+- name: Créer utilisateur PostgreSQL
+  shell: |
+    sudo -u postgres psql -c "CREATE USER odoo WITH PASSWORD 'odoo' CREATEDB;" 2>/dev/null || true
+    sudo -u postgres psql -c "ALTER USER odoo WITH PASSWORD 'odoo';" 2>/dev/null || true
+  ignore_errors: yes
+
+- name: Créer fichier config
   copy:
+    dest: /etc/odoo.conf
     content: |
-      <VirtualHost *:80>
-          ServerName 192.168.10.11
-          DocumentRoot /var/www/html/nextcloud
-          
-          <Directory /var/www/html/nextcloud>
-              Options +FollowSymlinks
-              AllowOverride All
-              Require all granted
-              Satisfy Any
-          </Directory>
-          
-          <IfModule mod_headers.c>
-              Header always set Strict-Transport-Security "max-age=15552000; includeSubDomains"
-          </IfModule>
-          
-          ErrorLog ${APACHE_LOG_DIR}/nextcloud_error.log
-          CustomLog ${APACHE_LOG_DIR}/nextcloud_access.log combined
-      </VirtualHost>
-    dest: /etc/apache2/sites-available/nextcloud.conf
-    mode: 0644
+      [options]
+      admin_passwd = admin
+      db_host = 127.0.0.1
+      db_port = 5432
+      db_user = odoo
+      db_password = odoo
+      addons_path = /opt/odoo/odoo-17/addons
+      logfile = /var/log/odoo/odoo.log
+    owner: odoo
+    group: odoo
+    mode: "0644"
 
-- name: Désactiver le site par défaut
-  command: a2dissite 000-default.conf
-  ignore_errors: yes
+- name: Créer répertoire logs
+  file:
+    path: /var/log/odoo
+    state: directory
+    owner: odoo
+    group: odoo
 
-- name: Activer le site Nextcloud
-  command: a2ensite nextcloud.conf
+- name: Créer service systemd
+  copy:
+    dest: /etc/systemd/system/odoo.service
+    content: |
+      [Unit]
+      Description=Odoo 17 ERP
+      After=postgresql.service network.target
 
-- name: Activer les modules Apache
-  command: "a2enmod {{ item }}"
-  loop:
-    - rewrite
-    - headers
-    - env
-    - dir
-    - mime
-    - setenvif
-  ignore_errors: yes
+      [Service]
+      Type=simple
+      User=odoo
+      ExecStart=/opt/odoo/venv/bin/python3 /opt/odoo/odoo-17/odoo-bin -c /etc/odoo.conf
+      Restart=always
 
-- name: Démarrer MariaDB
+      [Install]
+      WantedBy=multi-user.target
+
+- name: Démarrer PostgreSQL
   systemd:
-    name: mariadb
+    name: postgresql
     state: started
     enabled: yes
 
-- name: Installer Nextcloud
-  command: |
-    sudo -u www-data php /var/www/html/nextcloud/occ maintenance:install \
-      --database mysql \
-      --database-name nextcloud \
-      --database-user nextcloud_user \
-      --database-pass nextcloud_pass \
-      --admin-user leuz \
-      --admin-pass leuz123 \
-      --data-dir /var/www/html/nextcloud/data
-  args:
-    creates: /var/www/html/nextcloud/config/config.php
+- name: Reload systemd
+  command: systemctl daemon-reload
 
-- name: Configurer les domaines trusted
-  shell: |
-    sudo -u www-data php /var/www/html/nextcloud/occ config:system:set trusted_domains 0 --value="192.168.10.11"
-    sudo -u www-data php /var/www/html/nextcloud/occ config:system:set overwrite.cli.url --value="http://192.168.10.11"
+# ================================
+# INIT DB Leuz en français via odoo-bin
+# ================================
 
-- name: Désactiver la vérification HTTPS pour les tests
-  shell: |
-    sudo -u www-data php /var/www/html/nextcloud/occ config:system:set overwriteprotocol --value="http"
-  ignore_errors: yes
 
-- name: Configurer PHP pour Nextcloud 32
-  copy:
-    content: |
-      memory_limit = 1024M
-      upload_max_filesize = 16G
-      post_max_size = 16G
-      max_execution_time = 3600
-      max_input_time = 3600
-      date.timezone = UTC
-      opcache.enable = 1
-      opcache.memory_consumption = 256
-      opcache.interned_strings_buffer = 32
-      opcache.max_accelerated_files = 10000
-      opcache.revalidate_freq = 1
-      opcache.save_comments = 1
-    dest: /etc/php/8.2/apache2/conf.d/99-nextcloud.ini
-    mode: 0644
 
-- name: Configurer les permissions
-  shell: |
-    chown -R www-data:www-data /var/www/html/nextcloud
-    find /var/www/html/nextcloud -type d -exec chmod 755 {} \;
-    find /var/www/html/nextcloud -type f -exec chmod 644 {} \;
-    chmod 750 /var/www/html/nextcloud/data
-    chmod 750 /var/www/html/nextcloud/config
-
-- name: Ajouter les apps par défaut recommandées
-  shell: |
-    sudo -u www-data php /var/www/html/nextcloud/occ app:install calendar
-    sudo -u www-data php /var/www/html/nextcloud/occ app:install contacts
-    sudo -u www-data php /var/www/html/nextcloud/occ app:install notes
-    sudo -u www-data php /var/www/html/nextcloud/occ app:install deck
-  ignore_errors: yes
-
-- name: Définir le niveau de maintenance
-  copy:
-    content: |
-      <?php
-      $CONFIG = array (
-        'maintenance' => false,
-        'theme' => '',
-        'loglevel' => 2,
-      );
-    dest: /var/www/html/nextcloud/config/auto.config.php
-    owner: www-data
-    group: www-data
-    mode: 0644
-  ignore_errors: yes
-
-- name: Redémarrer Apache
+- name: Démarrer Odoo
   systemd:
-    name: apache2
-    state: restarted
+    name: odoo
+    state: started
     enabled: yes
 
-- name: Vérifier Nextcloud
-  uri:
-    url: http://192.168.10.11
-    status_code: 200
-    timeout: 30
-  register: result
-  until: result.status == 200
-  retries: 10
-  delay: 10
+- name: Attendre Odoo (port 8069)
+  wait_for:
+    port: 8069
+    timeout: 300
 
-- name: Afficher les informations de connexion
-  debug:
-    msg: |
-      ✅ Nextcloud 32 (dernière version) installé avec succès !
-      
-      🌐 URL : http://192.168.10.11
-      👤 Utilisateur : leuz
-      🔑 Mot de passe : leuz123
-      
-      📦 Applications installées automatiquement :
-      - Calendar
-      - Contacts
-      - Notes
-      - Deck
-      
-      💡 Pour installer d'autres applications :
-      - Se connecter en tant qu'administrateur
-      - Aller dans "Applications"
-      - Chercher et installer : ONLYOFFICE, Talk, Mail, etc.
+# ================================
+# CONFIG LDAP — admin/admin garanti
+# ================================
+

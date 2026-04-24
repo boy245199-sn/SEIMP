@@ -109,7 +109,7 @@
   copy:
     content: |
       <VirtualHost *:80>
-          ServerName 192.168.10.11
+          ServerName 192.168.20.11
           DocumentRoot /var/www/html/nextcloud
           
           <Directory /var/www/html/nextcloud>
@@ -168,8 +168,8 @@
 
 - name: Configurer les domaines trusted
   shell: |
-    sudo -u www-data php /var/www/html/nextcloud/occ config:system:set trusted_domains 0 --value="192.168.10.11"
-    sudo -u www-data php /var/www/html/nextcloud/occ config:system:set overwrite.cli.url --value="http://192.168.10.11"
+    sudo -u www-data php /var/www/html/nextcloud/occ config:system:set trusted_domains 0 --value="192.168.20.11"
+    sudo -u www-data php /var/www/html/nextcloud/occ config:system:set overwrite.cli.url --value="http://192.168.20.11"
 
 - name: Désactiver la vérification HTTPS pour les tests
   shell: |
@@ -233,7 +233,7 @@
 
 - name: Vérifier Nextcloud
   uri:
-    url: http://192.168.10.11
+    url: http://192.168.20.11
     status_code: 200
     timeout: 30
   register: result
@@ -246,7 +246,7 @@
     msg: |
       ✅ Nextcloud 32 (dernière version) installé avec succès !
       
-      🌐 URL : http://192.168.10.11
+      🌐 URL : http://192.168.20.11
       👤 Utilisateur : leuz
       🔑 Mot de passe : leuz123
       
