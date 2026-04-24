@@ -32,16 +32,18 @@
 *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 html { scroll-behavior: smooth; font-size: 16px; }
 
+
+
 body {
-  background: var(--white);
+  background: #f2f4f8;
+  background-image: radial-gradient(circle at 20% 20%, rgba(26,92,255,0.04) 0%, transparent 50%),
+                    radial-gradient(circle at 80% 80%, rgba(26,92,255,0.03) 0%, transparent 50%);
   color: var(--text);
   font-family: 'Outfit', sans-serif;
   font-weight: 400;
   line-height: 1.6;
   overflow-x: hidden;
 }
-
-/* ── SCROLLBAR ── */
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: var(--light); }
 ::-webkit-scrollbar-thumb { background: var(--blue-pale2); border-radius: 3px; }
@@ -99,10 +101,20 @@ nav {
 .btn-nav:hover { background: var(--blue-light); box-shadow: var(--shadow-blue); transform: translateY(-1px); }
 
 /* ── HERO ── */
+.hero-bg {
+  background: url('background.jpg') center/cover no-repeat;
+  position: relative;
+}
+.hero-bg::before {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(105deg, rgba(255,255,255,0.88) 40%, rgba(255,255,255,0.45) 65%, rgba(255,255,255,0.05) 100%);
+}
+
 .hero {
   padding: 140px 40px 100px;
   max-width: 1200px; margin: 0 auto;
   display: grid; grid-template-columns: 1fr 1fr; gap: 80px; align-items: center;
+  position: relative; z-index: 1;
 }
 .hero-eyebrow {
   display: inline-flex; align-items: center; gap: 8px;
@@ -225,7 +237,7 @@ nav {
 
 /* ── SECTION COMMONS ── */
 .section { padding: 96px 0; }
-.section-alt { background: var(--off-white); }
+.section-alt { background: rgba(240,243,249,0.6); }
 .section-header { margin-bottom: 56px; }
 .section-eyebrow {
   font-size: 11px; font-weight: 700; letter-spacing: 2px;
@@ -248,7 +260,7 @@ nav {
   display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px;
 }
 .service-card {
-  background: white; border: 1px solid var(--border);
+  background: rgba(255,255,255,0.75); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.9);
   border-radius: var(--radius); padding: 24px 20px;
   text-decoration: none; color: var(--text);
   transition: all 0.25s; position: relative; overflow: hidden;
@@ -358,7 +370,7 @@ nav {
 /* ── ONBOARDING TIMELINE ── */
 .onboarding-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
 .onboarding-step {
-  background: white; border: 1px solid var(--border);
+  background: rgba(255,255,255,0.72); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.9);
   border-radius: var(--radius); padding: 28px;
   box-shadow: var(--shadow); position: relative; overflow: hidden;
   transition: all 0.25s;
@@ -390,9 +402,9 @@ nav {
 /* ── CONTACTS ── */
 .contacts-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; }
 .contact-card {
-  background: white; border: 1px solid var(--border);
+  background: rgba(255,255,255,0.75); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.9);
   border-radius: var(--radius); padding: 28px 22px; text-align: center;
-  box-shadow: var(--shadow); transition: all 0.25s;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.15); transition: all 0.25s;
 }
 .contact-card:hover { box-shadow: var(--shadow-md); transform: translateY(-4px); border-color: var(--border-blue); }
 .contact-avatar {
@@ -422,12 +434,12 @@ nav {
 }
 .news-img {
   background: linear-gradient(135deg, var(--navy) 0%, #1a3a8c 100%);
-  height: 180px; display: flex; align-items: center; justify-content: center;
+  height: 220px; display: flex; align-items: center; justify-content: center;
   padding: 32px; position: relative; overflow: hidden;
 }
 .news-img::before {
   content: ''; position: absolute; inset: 0;
-  background: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.04'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+  background: radial-gradient(ellipse at 70% 50%, rgba(79,142,247,0.2), transparent 70%);
 }
 .news-img-content { position: relative; z-index: 1; text-align: center; color: white; }
 .news-img-icon { font-size: 40px; margin-bottom: 8px; }
@@ -456,10 +468,12 @@ nav {
 .news-item-title { font-weight: 600; font-size: 13px; color: var(--navy); margin-bottom: 4px; }
 .news-item-date { font-size: 12px; color: var(--text3); }
 
-/* ── SEARCH BAR ── */
+
 .search-section {
   background: var(--navy); padding: 48px 0;
 }
+.search-section > * { position: relative; z-index: 1; }
+
 .search-inner { max-width: 640px; margin: 0 auto; text-align: center; padding: 0 40px; }
 .search-title { font-family: 'Playfair Display', serif; font-size: 28px; font-weight: 700; color: white; margin-bottom: 8px; }
 .search-sub { font-size: 15px; color: rgba(255,255,255,0.6); margin-bottom: 24px; }
@@ -614,12 +628,37 @@ nav {
 .typing-ind span:nth-child(2) { animation-delay: 0.15s; }
 .typing-ind span:nth-child(3) { animation-delay: 0.3s; }
 
-/* ── FOOTER ── */
-footer {
-  background: var(--navy); padding: 56px 0 32px;
+
+
+/* ── NEWS SLIDER ── */
+.news-slider-wrap { position: relative; }
+.news-slider { position: relative; overflow: hidden; border-radius: var(--radius); box-shadow: var(--shadow-lg); background: white; border: 1px solid var(--border); }
+.news-slide { display: none; grid-template-columns: 280px 1fr; min-height: 260px; }
+.news-slide.active { display: grid; animation: slideIn 0.45s ease; }
+.news-slide-img { display: flex; align-items: center; justify-content: center; border-radius: var(--radius) 0 0 var(--radius); position: relative; overflow: hidden; }
+.news-slide-icon { font-size: 56px; position: relative; z-index: 1; }
+.news-slide-body { padding: 36px 32px; display: flex; flex-direction: column; justify-content: center; }
+.news-controls { display: flex; align-items: center; justify-content: center; gap: 16px; margin-top: 20px; }
+.news-prev, .news-next { width: 38px; height: 38px; border-radius: 50%; background: white; border: 1.5px solid var(--border); color: var(--text2); cursor: pointer; font-size: 16px; display: flex; align-items: center; justify-content: center; transition: all 0.2s; box-shadow: var(--shadow); }
+.news-prev:hover, .news-next:hover { background: var(--blue); color: white; border-color: var(--blue); }
+.news-dots { display: flex; gap: 8px; }
+.news-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border); cursor: pointer; transition: all 0.2s; border: none; }
+.news-dot.active { background: var(--blue); width: 22px; border-radius: 4px; }
+
+footer { background: var(--navy); padding: 56px 0 32px; }
+
+#scroll-top {
+  position: fixed; bottom: 100px; left: 32px; z-index: 900;
+  width: 46px; height: 46px; border-radius: 50%;
+  background: white; border: 1.5px solid var(--border);
+  color: var(--navy); font-size: 20px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: var(--shadow-md); transition: all 0.3s;
+  opacity: 0; pointer-events: none; transform: translateY(12px);
 }
-.footer-grid { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 48px; margin-bottom: 48px; }
-.footer-brand .nav-logo-mark { margin-bottom: 16px; }
+#scroll-top.visible { opacity: 1; pointer-events: all; transform: translateY(0); }
+#scroll-top:hover { background: var(--blue); color: white; border-color: var(--blue); box-shadow: var(--shadow-blue); transform: translateY(-4px); }
+
 .footer-brand-name { font-family: 'Playfair Display', serif; font-size: 22px; font-weight: 700; color: white; margin-bottom: 8px; }
 .footer-brand-sub { font-size: 14px; color: rgba(255,255,255,0.5); line-height: 1.6; max-width: 260px; }
 .footer-col-title { font-weight: 700; font-size: 13px; color: white; letter-spacing: 0.5px; text-transform: uppercase; margin-bottom: 16px; }
@@ -703,44 +742,43 @@ footer {
   </div>
 </div>
 
-<!-- HERO -->
-<div class="hero">
-  <div class="hero-left">
-    <div class="hero-eyebrow"><span class="hero-eyebrow-dot"></span>Portail Employé SEIMP</div>
-    <h1>Votre espace de travail <em>numérique</em> unifié.</h1>
-    <p class="hero-sub">Tous vos outils professionnels, votre documentation et vos ressources internes accessibles depuis un seul portail sécurisé.</p>
-    <div class="hero-actions">
-      <a href="#services" class="btn-primary">Découvrir les services <span>→</span></a>
-      <a href="#onboarding" class="btn-outline">Plan d'onboarding</a>
-    </div>
-    <div class="hero-stats">
-      <div class="stat"><div class="stat-num">17<span>+</span></div><div class="stat-label">Services disponibles</div></div>
-      <div class="stat"><div class="stat-num">99<span>%</span></div><div class="stat-label">Disponibilité</div></div>
-      <div class="stat"><div class="stat-num">24<span>/7</span></div><div class="stat-label">Accès continu</div></div>
-    </div>
-  </div>
-  <div class="hero-visual">
-    <div class="hero-badge-float">
-      <div class="hero-badge-icon">🟢</div>
-      <div><div class="hero-badge-text">Tous les services</div><div class="hero-badge-sub">opérationnels</div></div>
-    </div>
-    <div class="hero-card-main">
-      <div class="hero-card-header">
-        <div class="hero-card-dots"><span></span><span></span><span></span></div>
-        <div class="hero-card-title">Tableau de bord</div>
+
+
+<div class="hero-bg">
+  <div class="hero">
+    <div class="hero-left">
+      <div class="hero-eyebrow"><span class="hero-eyebrow-dot"></span>Portail Employé SEIMP</div>
+      <h1>Votre espace de travail <em>numérique</em> unifié.</h1>
+      <p class="hero-sub">Tous vos outils professionnels, votre documentation et vos ressources internes accessibles depuis un seul portail sécurisé.</p>
+      <div class="hero-actions">
+        <a href="#services" class="btn-primary">Découvrir les services <span>→</span></a>
+        <a href="#onboarding" class="btn-outline">Plan d'onboarding</a>
       </div>
-      <div class="hero-mini-services">
-        <div class="hero-mini-service"><div class="hero-mini-icon">📖</div><div><div class="hero-mini-name">Wiki</div><div class="hero-mini-status">● En ligne</div></div></div>
-        <div class="hero-mini-service"><div class="hero-mini-icon">☁️</div><div><div class="hero-mini-name">Nextcloud</div><div class="hero-mini-status">● En ligne</div></div></div>
-        <div class="hero-mini-service"><div class="hero-mini-icon">🏢</div><div><div class="hero-mini-name">Odoo</div><div class="hero-mini-status">● En ligne</div></div></div>
-        <div class="hero-mini-service"><div class="hero-mini-icon">📋</div><div><div class="hero-mini-name">Plane</div><div class="hero-mini-status">● En ligne</div></div></div>
-        <div class="hero-mini-service"><div class="hero-mini-icon">📊</div><div><div class="hero-mini-name">Metabase</div><div class="hero-mini-status">● En ligne</div></div></div>
-        <div class="hero-mini-service"><div class="hero-mini-icon">🎥</div><div><div class="hero-mini-name">Jitsi</div><div class="hero-mini-status">● En ligne</div></div></div>
+      <div class="hero-stats">
+        <div class="stat"><div class="stat-num">17<span>+</span></div><div class="stat-label">Services disponibles</div></div>
+        <div class="stat"><div class="stat-num">99<span>%</span></div><div class="stat-label">Disponibilité</div></div>
+        <div class="stat"><div class="stat-num">24<span>/7</span></div><div class="stat-label">Accès continu</div></div>
       </div>
     </div>
-    <div class="hero-badge-float2">
-      <div class="hero-badge-icon">🔐</div>
-      <div><div class="hero-badge-text">Authentification LDAP</div><div class="hero-badge-sub">Un seul compte, tous les accès</div></div>
+    <div class="hero-visual">
+      <div class="hero-badge-float">
+        <div class="hero-badge-icon">🟢</div>
+        <div><div class="hero-badge-text">Tous les services</div><div class="hero-badge-sub">opérationnels</div></div>
+      </div>
+      <div class="hero-card-main">
+        <div class="hero-card-header">
+          <div class="hero-card-dots"><span></span><span></span><span></span></div>
+          <div class="hero-card-title">Tableau de bord</div>
+        </div>
+        <div class="hero-mini-services">
+          <div class="hero-mini-service"><div class="hero-mini-icon">📖</div><div><div class="hero-mini-name">Wiki</div><div class="hero-mini-status">● En ligne</div></div></div>
+          <div class="hero-mini-service"><div class="hero-mini-icon">☁️</div><div><div class="hero-mini-name">Nextcloud</div><div class="hero-mini-status">● En ligne</div></div></div>
+          <div class="hero-mini-service"><div class="hero-mini-icon">🏢</div><div><div class="hero-mini-name">Odoo</div><div class="hero-mini-status">● En ligne</div></div></div>
+          <div class="hero-mini-service"><div class="hero-mini-icon">📋</div><div><div class="hero-mini-name">Plane</div><div class="hero-mini-status">● En ligne</div></div></div>
+          <div class="hero-mini-service"><div class="hero-mini-icon">📊</div><div><div class="hero-mini-name">Metabase</div><div class="hero-mini-status">● En ligne</div></div></div>
+          <div class="hero-mini-service"><div class="hero-mini-icon">🎥</div><div><div class="hero-mini-name">Jitsi</div><div class="hero-mini-status">● En ligne</div></div></div>
+        </div>
+      </div>
     </div>
   </div>
 </div>
@@ -819,8 +857,9 @@ footer {
 </section>
 
 <!-- MANUEL -->
-<section id="manuel" class="section section-alt">
-  <div class="container">
+<section id="manuel" class="section" style="position:relative; background: url('background2.jpg') center/cover no-repeat;">
+  <div style="position:absolute;inset:0;background:rgba(248,249,252,0.30);"></div>
+  <div class="container" style="position:relative;z-index:1;">
     <div class="section-header reveal">
       <div class="section-eyebrow">Documentation</div>
       <h2 class="section-title">Manuel de l'employé</h2>
@@ -839,45 +878,45 @@ footer {
         <div class="manuel-panel active" id="panel-securite">
           <div class="manuel-panel-header"><div class="manuel-panel-icon">🛡️</div><div><div class="manuel-panel-title">Sécurité & Accès</div><div class="manuel-panel-sub">Règles de sécurité informatique</div></div></div>
           <div class="manuel-panel-body">
-            <div class="manuel-rule"><div class="manuel-rule-num">1</div><div><div class="manuel-rule-title">Identifiants LDAP uniques</div><div class="manuel-rule-text">Un seul compte LDAP donne accès à tous les services. Ne partagez jamais vos identifiants. En cas de compromission, contactez immédiatement le DSI à <code>dsi@seimp.local</code>.</div></div></div>
-            <div class="manuel-rule"><div class="manuel-rule-num">2</div><div><div class="manuel-rule-title">VPN obligatoire en télétravail</div><div class="manuel-rule-text">Toute connexion depuis l'extérieur doit passer par le VPN WireGuard. Serveur : <code>192.168.20.23</code>. Configuration fournie par le DSI.</div></div></div>
-            <div class="manuel-rule"><div class="manuel-rule-num">3</div><div><div class="manuel-rule-title">Gestionnaire de mots de passe</div><div class="manuel-rule-text">Utilisez Vaultwarden pour tous vos mots de passe professionnels. Disponible sur <code>192.168.20.34</code> et en extension navigateur. Aucun mot de passe noté sur papier ou stocké en clair.</div></div></div>
-            <div class="manuel-rule"><div class="manuel-rule-num">4</div><div><div class="manuel-rule-title">Signalement d'incidents</div><div class="manuel-rule-text">Toute anomalie de sécurité (comportement suspect, accès non autorisé, malware) doit être remontée immédiatement au RSSI via <code>securite@seimp.local</code>.</div></div></div>
-            <div class="manuel-rule"><div class="manuel-rule-num">5</div><div><div class="manuel-rule-title">Verrouillage de session</div><div class="manuel-rule-text">Verrouillez votre poste à chaque absence, même courte. Raccourci : <code>Win+L</code> (Windows) ou <code>Ctrl+Alt+L</code> (Linux).</div></div></div>
+            <div class="manuel-rule"><div class="manuel-rule-num">1</div><div><div class="manuel-rule-title">Identifiants LDAP uniques</div><div class="manuel-rule-text">Un seul compte LDAP donne accès à tous les services. Ne partagez jamais vos identifiants. Contactez le DSI à <code>dsi@seimp.local</code>.</div></div></div>
+            <div class="manuel-rule"><div class="manuel-rule-num">2</div><div><div class="manuel-rule-title">VPN obligatoire en télétravail</div><div class="manuel-rule-text">Toute connexion depuis l'extérieur doit passer par le VPN WireGuard. Serveur : <code>192.168.20.23</code>.</div></div></div>
+            <div class="manuel-rule"><div class="manuel-rule-num">3</div><div><div class="manuel-rule-title">Gestionnaire de mots de passe</div><div class="manuel-rule-text">Utilisez Vaultwarden <code>192.168.20.34</code> pour tous vos mots de passe professionnels.</div></div></div>
+            <div class="manuel-rule"><div class="manuel-rule-num">4</div><div><div class="manuel-rule-title">Signalement d'incidents</div><div class="manuel-rule-text">Toute anomalie de sécurité doit être remontée au RSSI via <code>securite@seimp.local</code>.</div></div></div>
+            <div class="manuel-rule"><div class="manuel-rule-num">5</div><div><div class="manuel-rule-title">Verrouillage de session</div><div class="manuel-rule-text">Verrouillez votre poste à chaque absence. Raccourci : <code>Win+L</code> (Windows) ou <code>Ctrl+Alt+L</code> (Linux).</div></div></div>
           </div>
         </div>
         <div class="manuel-panel" id="panel-outils">
           <div class="manuel-panel-header"><div class="manuel-panel-icon">💻</div><div><div class="manuel-panel-title">Outils de travail</div><div class="manuel-panel-sub">Services et applications professionnels</div></div></div>
           <div class="manuel-panel-body">
-            <div class="manuel-rule"><div class="manuel-rule-num">1</div><div><div class="manuel-rule-title">Nextcloud — stockage officiel</div><div class="manuel-rule-text">Tous les fichiers professionnels doivent être sur Nextcloud <code>192.168.20.11</code>. Aucun Google Drive, Dropbox ou WeTransfer pour les données internes.</div></div></div>
-            <div class="manuel-rule"><div class="manuel-rule-num">2</div><div><div class="manuel-rule-title">OnlyOffice — édition documentaire</div><div class="manuel-rule-text">Éditez vos documents directement depuis Nextcloud via OnlyOffice <code>192.168.20.31</code>. Compatible .docx, .xlsx, .pptx.</div></div></div>
-            <div class="manuel-rule"><div class="manuel-rule-num">3</div><div><div class="manuel-rule-title">Plane — gestion des tâches</div><div class="manuel-rule-text">Toutes les tâches et projets sont tracés sur Plane <code>192.168.20.38</code>. Pour tout incident, créez un ticket et assignez-le à votre responsable.</div></div></div>
-            <div class="manuel-rule"><div class="manuel-rule-num">4</div><div><div class="manuel-rule-title">Jitsi Meet — réunions vidéo</div><div class="manuel-rule-text">Priorité à Jitsi <code>192.168.20.35</code> pour toutes les réunions. Réunion hebdomadaire chaque lundi à 9h00. Lien fixe dans le Wiki.</div></div></div>
+            <div class="manuel-rule"><div class="manuel-rule-num">1</div><div><div class="manuel-rule-title">Nextcloud — stockage officiel</div><div class="manuel-rule-text">Tous les fichiers professionnels sur Nextcloud <code>192.168.20.11</code>. Aucun Google Drive ou Dropbox.</div></div></div>
+            <div class="manuel-rule"><div class="manuel-rule-num">2</div><div><div class="manuel-rule-title">OnlyOffice — édition documentaire</div><div class="manuel-rule-text">Éditez depuis Nextcloud via OnlyOffice <code>192.168.20.31</code>. Compatible .docx, .xlsx, .pptx.</div></div></div>
+            <div class="manuel-rule"><div class="manuel-rule-num">3</div><div><div class="manuel-rule-title">Plane — gestion des tâches</div><div class="manuel-rule-text">Toutes les tâches sur Plane <code>192.168.20.38</code>. Pour tout incident, créez un ticket.</div></div></div>
+            <div class="manuel-rule"><div class="manuel-rule-num">4</div><div><div class="manuel-rule-title">Jitsi Meet — réunions vidéo</div><div class="manuel-rule-text">Priorité à Jitsi <code>192.168.20.35</code>. Réunion hebdo lundi à 9h00.</div></div></div>
           </div>
         </div>
         <div class="manuel-panel" id="panel-regles">
           <div class="manuel-panel-header"><div class="manuel-panel-icon">📌</div><div><div class="manuel-panel-title">Règles & Bonnes pratiques</div><div class="manuel-panel-sub">Politiques internes et standards</div></div></div>
           <div class="manuel-panel-body">
-            <div class="manuel-rule"><div class="manuel-rule-num">1</div><div><div class="manuel-rule-title">Confidentialité des données</div><div class="manuel-rule-text">Les données clients et internes ne quittent jamais les serveurs SEIMP. Toute communication externe de données doit être approuvée par la direction.</div></div></div>
-            <div class="manuel-rule"><div class="manuel-rule-num">2</div><div><div class="manuel-rule-title">Convention de nommage</div><div class="manuel-rule-text">Format obligatoire : <code>AAAA-MM-JJ_projet_description_v1</code>. Exemple : <code>2025-01-15_seimp_rapport-audit_v2</code>.</div></div></div>
-            <div class="manuel-rule"><div class="manuel-rule-num">3</div><div><div class="manuel-rule-title">Sauvegardes automatiques</div><div class="manuel-rule-text">Le serveur backup <code>192.168.20.21</code> effectue des sauvegardes nocturnes automatiques. Conservation : 30 jours. Pour toute restauration, contactez le DSI.</div></div></div>
-            <div class="manuel-rule"><div class="manuel-rule-num">4</div><div><div class="manuel-rule-title">Documentation obligatoire</div><div class="manuel-rule-text">Toute nouvelle procédure, configuration ou processus doit être documenté sur le Wiki <code>192.168.20.32</code> dans les 48h suivant sa mise en place.</div></div></div>
+            <div class="manuel-rule"><div class="manuel-rule-num">1</div><div><div class="manuel-rule-title">Confidentialité des données</div><div class="manuel-rule-text">Les données internes ne quittent jamais les serveurs SEIMP.</div></div></div>
+            <div class="manuel-rule"><div class="manuel-rule-num">2</div><div><div class="manuel-rule-title">Convention de nommage</div><div class="manuel-rule-text">Format : <code>AAAA-MM-JJ_projet_description_v1</code>.</div></div></div>
+            <div class="manuel-rule"><div class="manuel-rule-num">3</div><div><div class="manuel-rule-title">Sauvegardes automatiques</div><div class="manuel-rule-text">Serveur backup <code>192.168.20.21</code>, sauvegardes nocturnes, conservation 30 jours.</div></div></div>
+            <div class="manuel-rule"><div class="manuel-rule-num">4</div><div><div class="manuel-rule-title">Documentation obligatoire</div><div class="manuel-rule-text">Toute procédure documentée sur le Wiki <code>192.168.20.32</code> dans les 48h.</div></div></div>
           </div>
         </div>
         <div class="manuel-panel" id="panel-communication">
           <div class="manuel-panel-header"><div class="manuel-panel-icon">🌐</div><div><div class="manuel-panel-title">Communication</div><div class="manuel-panel-sub">Canaux et pratiques de communication</div></div></div>
           <div class="manuel-panel-body">
-            <div class="manuel-rule"><div class="manuel-rule-num">1</div><div><div class="manuel-rule-title">Email professionnel exclusif</div><div class="manuel-rule-text">Utilisez uniquement Mailcow <code>192.168.20.30</code> pour les échanges professionnels. Configurez votre client IMAP/SMTP selon le guide dans le Wiki.</div></div></div>
-            <div class="manuel-rule"><div class="manuel-rule-num">2</div><div><div class="manuel-rule-title">Réunion hebdomadaire</div><div class="manuel-rule-text">Chaque lundi à 9h00 sur Jitsi. Présence obligatoire sauf absence justifiée. Ordre du jour publié sur Plane le vendredi précédent.</div></div></div>
-            <div class="manuel-rule"><div class="manuel-rule-num">3</div><div><div class="manuel-rule-title">Délais de réponse</div><div class="manuel-rule-text">Email interne : réponse sous 4h ouvrables. Urgences : email + appel téléphonique direct. Incidents critiques : immédiat via DSI et RSSI.</div></div></div>
+            <div class="manuel-rule"><div class="manuel-rule-num">1</div><div><div class="manuel-rule-title">Email professionnel exclusif</div><div class="manuel-rule-text">Utilisez uniquement Mailcow <code>192.168.20.30</code> pour les échanges professionnels.</div></div></div>
+            <div class="manuel-rule"><div class="manuel-rule-num">2</div><div><div class="manuel-rule-title">Réunion hebdomadaire</div><div class="manuel-rule-text">Chaque lundi à 9h00 sur Jitsi. Ordre du jour publié sur Plane le vendredi.</div></div></div>
+            <div class="manuel-rule"><div class="manuel-rule-num">3</div><div><div class="manuel-rule-title">Délais de réponse</div><div class="manuel-rule-text">Email interne : réponse sous 4h ouvrables. Urgences : email + appel direct.</div></div></div>
           </div>
         </div>
         <div class="manuel-panel" id="panel-it">
           <div class="manuel-panel-header"><div class="manuel-panel-icon">🔧</div><div><div class="manuel-panel-title">Support IT</div><div class="manuel-panel-sub">Comment obtenir de l'aide technique</div></div></div>
           <div class="manuel-panel-body">
-            <div class="manuel-rule"><div class="manuel-rule-num">1</div><div><div class="manuel-rule-title">Ticket Plane en priorité</div><div class="manuel-rule-text">Pour tout problème technique, ouvrez d'abord un ticket sur Plane <code>192.168.20.38</code>. Sélectionnez le projet "Support IT" et catégorisez votre demande.</div></div></div>
-            <div class="manuel-rule"><div class="manuel-rule-num">2</div><div><div class="manuel-rule-title">Niveaux d'urgence</div><div class="manuel-rule-text"><strong>P1 Critique</strong> (service inaccessible) → DSI immédiat. <strong>P2 Majeur</strong> (gêne importante) → ticket + email. <strong>P3 Mineur</strong> → ticket uniquement.</div></div></div>
-            <div class="manuel-rule"><div class="manuel-rule-num">3</div><div><div class="manuel-rule-title">Monitoring Wazuh</div><div class="manuel-rule-text">Le SIEM Wazuh <code>192.168.20.22</code> surveille l'ensemble de l'infrastructure 24/7. Les alertes sont automatiquement remontées à l'équipe sécurité.</div></div></div>
+            <div class="manuel-rule"><div class="manuel-rule-num">1</div><div><div class="manuel-rule-title">Ticket Plane en priorité</div><div class="manuel-rule-text">Ouvrez un ticket sur Plane <code>192.168.20.38</code>, projet "Support IT".</div></div></div>
+            <div class="manuel-rule"><div class="manuel-rule-num">2</div><div><div class="manuel-rule-title">Niveaux d'urgence</div><div class="manuel-rule-text"><strong>P1 Critique</strong> → DSI immédiat. <strong>P2 Majeur</strong> → ticket + email. <strong>P3 Mineur</strong> → ticket uniquement.</div></div></div>
+            <div class="manuel-rule"><div class="manuel-rule-num">3</div><div><div class="manuel-rule-title">Monitoring Wazuh</div><div class="manuel-rule-text">Le SIEM Wazuh <code>192.168.20.22</code> surveille l'infrastructure 24/7.</div></div></div>
           </div>
         </div>
       </div>
@@ -886,8 +925,9 @@ footer {
 </section>
 
 <!-- ONBOARDING -->
-<section id="onboarding" class="section">
-  <div class="container">
+<section id="onboarding" class="section" style="position:relative; background: url('background3.png') center/cover no-repeat;">
+  <div style="position:absolute;inset:0;background:rgba(255,255,255,0.30);"></div>
+  <div class="container" style="position:relative;z-index:1;">
     <div class="section-header reveal">
       <div class="section-eyebrow">Premiers pas</div>
       <h2 class="section-title">Votre plan d'onboarding</h2>
@@ -954,46 +994,80 @@ footer {
       <h2 class="section-title">Dernières nouvelles</h2>
       <p class="section-sub">Restez informé des dernières mises à jour et annonces internes.</p>
     </div>
-    <div class="news-grid reveal">
-      <div class="news-main">
-        <div class="news-img">
-          <div class="news-img-content">
-            <div class="news-img-icon">🚀</div>
-            <div class="news-img-title">Mise à jour infrastructure</div>
+    <div class="news-slider-wrap reveal">
+      <div class="news-slider" id="news-slider">
+
+        <div class="news-slide active">
+          <div class="news-slide-img" style="background:linear-gradient(135deg,#0a1f5c,#1a5cff);">
+            <div class="news-slide-icon">🚀</div>
+          </div>
+          <div class="news-slide-body">
+            <div class="news-tag">Annonce</div>
+            <div class="news-title">Migration réussie vers VMware — Infrastructure SEIMP v2.0</div>
+            <div class="news-text">L'ensemble de l'infrastructure SEIMP a été migré avec succès vers VMware. 17 services sont désormais disponibles sur le nouveau réseau 192.168.20.x.</div>
+            <div class="news-date">Aujourd'hui — Équipe DSI</div>
           </div>
         </div>
-        <div class="news-body">
-          <div class="news-tag">Annonce</div>
-          <div class="news-title">Migration réussie vers VMware — Infrastructure SEIMP v2.0</div>
-          <div class="news-text">L'ensemble de l'infrastructure SEIMP a été migré avec succès vers VMware. 17 services sont désormais disponibles sur le nouveau réseau 192.168.20.x. Les performances ont été améliorées et la stabilité renforcée.</div>
-          <div class="news-date">Aujourd'hui — Équipe DSI</div>
+
+        <div class="news-slide">
+          <div class="news-slide-img" style="background:linear-gradient(135deg,#1a5cff,#3b74ff);">
+            <div class="news-slide-icon">🔧</div>
+          </div>
+          <div class="news-slide-body">
+            <div class="news-tag">Maintenance</div>
+            <div class="news-title">Maintenance Mailcow — Dimanche 02h-04h</div>
+            <div class="news-text">Une maintenance planifiée du serveur mail aura lieu ce dimanche de 02h à 04h. Le service email sera temporairement indisponible durant cette période.</div>
+            <div class="news-date">Cette semaine — Équipe DSI</div>
+          </div>
         </div>
+
+        <div class="news-slide">
+          <div class="news-slide-img" style="background:linear-gradient(135deg,#0a1f5c,#7c3aed);">
+            <div class="news-slide-icon">📚</div>
+          </div>
+          <div class="news-slide-body">
+            <div class="news-tag">Formation</div>
+            <div class="news-title">Session Odoo RH — Jeudi 14h sur Jitsi</div>
+            <div class="news-text">Une session de formation sur le module RH d'Odoo est organisée jeudi à 14h. Rejoignez Jitsi avec le lien disponible dans le Wiki.</div>
+            <div class="news-date">Jeudi prochain — RH</div>
+          </div>
+        </div>
+
+        <div class="news-slide">
+          <div class="news-slide-img" style="background:linear-gradient(135deg,#dc2626,#1a5cff);">
+            <div class="news-slide-icon">🔒</div>
+          </div>
+          <div class="news-slide-body">
+            <div class="news-tag">Sécurité</div>
+            <div class="news-title">Rappel : VPN obligatoire dès le télétravail</div>
+            <div class="news-text">Toute connexion aux services SEIMP depuis l'extérieur doit obligatoirement passer par le VPN WireGuard. Contactez le DSI pour votre configuration.</div>
+            <div class="news-date">Il y a 2 jours — RSSI</div>
+          </div>
+        </div>
+
+        <div class="news-slide">
+          <div class="news-slide-img" style="background:linear-gradient(135deg,#059669,#1a5cff);">
+            <div class="news-slide-icon">🌐</div>
+          </div>
+          <div class="news-slide-body">
+            <div class="news-tag">Nouveau</div>
+            <div class="news-title">Portail employé disponible sur 192.168.20.40</div>
+            <div class="news-text">Le portail d'accueil SEIMP est maintenant en ligne. Retrouvez tous vos services, le manuel et votre plan d'onboarding en un seul endroit.</div>
+            <div class="news-date">Aujourd'hui — Équipe DSI</div>
+          </div>
+        </div>
+
       </div>
-      <div class="news-sidebar">
-        <div class="news-item">
-          <div class="news-item-tag">Maintenance</div>
-          <div class="news-item-title">Maintenance Mailcow — Dimanche 02h-04h</div>
-          <div class="news-item-date">Cette semaine</div>
-        </div>
-        <div class="news-item">
-          <div class="news-item-tag">Formation</div>
-          <div class="news-item-title">Session Odoo RH — Jeudi 14h sur Jitsi</div>
-          <div class="news-item-date">Jeudi prochain</div>
-        </div>
-        <div class="news-item">
-          <div class="news-item-tag">Sécurité</div>
-          <div class="news-item-title">Rappel : VPN obligatoire dès le télétravail</div>
-          <div class="news-item-date">Il y a 2 jours</div>
-        </div>
-        <div class="news-item">
-          <div class="news-item-tag">Nouveau</div>
-          <div class="news-item-title">Portail employé disponible sur 192.168.20.40</div>
-          <div class="news-item-date">Aujourd'hui</div>
-        </div>
+      <div class="news-controls">
+        <button class="news-prev" onclick="newsSlide(-1)">&#8592;</button>
+        <div class="news-dots" id="news-dots"></div>
+        <button class="news-next" onclick="newsSlide(1)">&#8594;</button>
       </div>
     </div>
   </div>
 </section>
+
+
 
 <!-- CONTACTS -->
 <section id="contacts" class="section">
@@ -1031,8 +1105,6 @@ footer {
     </div>
   </div>
 </section>
-
-<!-- FOOTER -->
 <footer>
   <div class="container">
     <div class="footer-grid">
@@ -1082,6 +1154,9 @@ footer {
     </div>
   </div>
 </footer>
+
+<!-- SCROLL TO TOP -->
+<button id="scroll-top" onclick="window.scrollTo({top:0,behavior:'smooth'})" title="Retour en haut">↑</button>
 
 <!-- CHATBOT -->
 <button id="chat-fab" onclick="toggleChat()">
@@ -1239,6 +1314,40 @@ function chipClick(el) {
 
 function chatKey(e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); chatSend(); } }
 function chatResize(el) { el.style.height = 'auto'; el.style.height = Math.min(el.scrollHeight, 80) + 'px'; }
+
+// ── SCROLL TO TOP ──
+window.addEventListener('scroll', () => {
+  const btn = document.getElementById('scroll-top');
+  if (window.scrollY > 400) btn.classList.add('visible');
+  else btn.classList.remove('visible');
+});
+
+// ── NEWS SLIDER ──
+let newsIndex = 0;
+const slides = document.querySelectorAll('.news-slide');
+const dotsContainer = document.getElementById('news-dots');
+
+function initSlider() {
+  slides.forEach((_, i) => {
+    const dot = document.createElement('button');
+    dot.className = 'news-dot' + (i === 0 ? ' active' : '');
+    dot.onclick = () => goToSlide(i);
+    dotsContainer.appendChild(dot);
+  });
+}
+
+function goToSlide(n) {
+  slides[newsIndex].classList.remove('active');
+  document.querySelectorAll('.news-dot')[newsIndex].classList.remove('active');
+  newsIndex = (n + slides.length) % slides.length;
+  slides[newsIndex].classList.add('active');
+  document.querySelectorAll('.news-dot')[newsIndex].classList.add('active');
+}
+
+function newsSlide(dir) { goToSlide(newsIndex + dir); }
+
+initSlider();
+setInterval(() => newsSlide(1), 5000);
 </script>
 </body>
 </html>

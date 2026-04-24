@@ -12,6 +12,9 @@
       - openssh-client
       - sshpass
       - mailutils
+      - nfs-kernel-server
+      - samba
+      - cifs-utils
     state: present
 
 - name: Télécharger Restic
@@ -33,13 +36,21 @@
     mode: 0755
     remote_src: yes
 
-- name: Créer le répertoire de backup
+- name: Créer les répertoires
   file:
-    path: /backup
+    path: "{{ item }}"
     state: directory
-    mode: 0750
+    mode: 0755
     owner: root
     group: root
+  loop:
+    - /backup
+    - /srv/nfs/documents
+    - /srv/nfs/factures
+    - /srv/nfs/employes
+    - /srv/nfs/logs
+    - /srv/nfs/odoo
+    - /srv/nfs/nextcloud
 
 - name: Initialiser le dépôt Restic
   command: |
@@ -48,7 +59,71 @@
     RESTIC_PASSWORD: "SEIMP_Restic_Backup_2024!"
   ignore_errors: yes
 
-- name: Créer le script de backup
+- name: Configurer NFS (exports)
+  copy:
+    dest: /etc/exports
+    content: |
+      /srv/nfs/documents 192.168.20.0/24(rw,sync,no_subtree_check)
+      /srv/nfs/factures 192.168.20.0/24(rw,sync,no_subtree_check)
+      /srv/nfs/employes 192.168.20.0/24(rw,sync,no_subtree_check)
+      /srv/nfs/odoo     192.168.20.0/24(rw,sync,no_subtree_check)
+      /srv/nfs/nextcloud 192.168.20.0/24(rw,sync,no_subtree_check)
+
+- name: Redémarrer NFS
+  systemd:
+    name: nfs-server
+    state: restarted
+    enabled: yes
+
+- name: Configurer Samba
+  copy:
+    dest: /etc/samba/smb.conf
+    content: |
+      [global]
+         workgroup = SEIMP
+         server string = SEIMP Backup NAS
+         security = user
+         map to guest = Bad User
+      
+      [documents]
+         path = /srv/nfs/documents
+         browseable = yes
+         read only = no
+         guest ok = yes
+         create mask = 0777
+         directory mask = 0777
+      
+      [factures]
+         path = /srv/nfs/factures
+         browseable = yes
+         read only = no
+         guest ok = yes
+      
+      [employes]
+         path = /srv/nfs/employes
+         browseable = yes
+         read only = no
+         guest ok = yes
+      
+      [odoo]
+         path = /srv/nfs/odoo
+         browseable = yes
+         read only = no
+         guest ok = yes
+      
+      [nextcloud]
+         path = /srv/nfs/nextcloud
+         browseable = yes
+         read only = no
+         guest ok = yes
+
+- name: Démarrer Samba
+  systemd:
+    name: smbd
+    state: restarted
+    enabled: yes
+
+- name: Créer le script de backup complet
   copy:
     dest: /usr/local/bin/backup.sh
     mode: 0700
@@ -70,42 +145,42 @@
           
           echo "[$DATE] Backup $name ($ip)..." >> $LOG_FILE
           
-          # Créer une archive tar
           ssh -o StrictHostKeyChecking=no vagrant@$ip "sudo tar czf /tmp/${name}_backup.tar.gz $paths 2>/dev/null"
-          
-          # Transférer l'archive
           scp vagrant@$ip:/tmp/${name}_backup.tar.gz /tmp/ 2>/dev/null
-          
-          # Sauvegarder avec Restic
           /usr/local/bin/restic backup /tmp/${name}_backup.tar.gz --tag $name >> $LOG_FILE 2>&1
-          
-          # Nettoyer
           ssh -o StrictHostKeyChecking=no vagrant@$ip "sudo rm -f /tmp/${name}_backup.tar.gz"
           rm -f /tmp/${name}_backup.tar.gz
-          
           echo "[$DATE] Backup $name terminé" >> $LOG_FILE
       }
       
-      # Sauvegardes
-      backup_service "ldap" "192.168.10.10" "/etc/ldap /var/lib/ldap /var/www/html/employes.php /var/www/html/photos /var/www/html/data"
-      backup_service "nextcloud" "192.168.10.11" "/var/www/html/nextcloud /var/lib/mysql"
-      backup_service "odoo" "192.168.10.12" "/opt/odoo /etc/odoo.conf"
-      backup_service "badge" "192.168.10.20" "/opt/badge /var/log/badge"
+      # Sauvegarde de TOUTES les VMs
+      backup_service "ldap" "192.168.20.10" "/etc/ldap /var/lib/ldap /var/www/html"
+      backup_service "portail" "192.168.20.40" "/var/www/html"
+      backup_service "nextcloud" "192.168.20.11" "/var/www/html/nextcloud /var/lib/mysql"
+      backup_service "odoo" "192.168.20.12" "/opt/odoo /etc/odoo.conf /var/lib/postgresql"
+      backup_service "badge" "192.168.20.20" "/opt/badge /var/log/badge"
+      backup_service "mail" "192.168.20.30" "/opt/mailcow /var/vmail"
+      backup_service "wiki" "192.168.20.32" "/var/www/bookstack"
+      backup_service "vaultwarden" "192.168.20.34" "/opt/vaultwarden/data"
+      backup_service "metabase" "192.168.20.36" "/opt/metabase/data"
+      backup_service "n8n" "192.168.20.37" "/opt/n8n/data"
+      backup_service "plane" "192.168.20.38" "/opt/plane/data"
       
-      # Vérification de l'intégrité
+      # Sauvegarde des répertoires NAS
+      echo "[$DATE] Sauvegarde des données NAS..." >> $LOG_FILE
+      tar czf /tmp/nas_backup.tar.gz /srv/nfs 2>/dev/null
+      /usr/local/bin/restic backup /tmp/nas_backup.tar.gz --tag nas >> $LOG_FILE 2>&1
+      rm -f /tmp/nas_backup.tar.gz
+      
+      # Vérification
       echo "[$DATE] Vérification de l'intégrité..." >> $LOG_FILE
       /usr/local/bin/restic check >> $LOG_FILE 2>&1
       
-      # Nettoyage des anciennes sauvegardes
+      # Nettoyage
       echo "[$DATE] Nettoyage..." >> $LOG_FILE
       /usr/local/bin/restic forget --keep-daily 7 --keep-weekly 4 --keep-monthly 6 --prune >> $LOG_FILE 2>&1
       
-      # Statistiques
-      echo "[$DATE] Statistiques des snapshots :" >> $LOG_FILE
-      /usr/local/bin/restic stats >> $LOG_FILE 2>&1
-      
       echo "[$DATE] ========== FIN SAUVEGARDE ==========" >> $LOG_FILE
-      echo "" >> $LOG_FILE
 
 - name: Créer le script de restauration
   copy:
@@ -134,7 +209,7 @@
       read SNAPSHOT_ID
       echo ""
       
-      echo -e "${YELLOW}Service à restaurer (ldap/nextcloud/odoo/badge/all) :${NC}"
+      echo -e "${YELLOW}Service à restaurer (ldap/nextcloud/odoo/badge/mail/wiki/vaultwarden/nas/all) :${NC}"
       read SERVICE
       
       RESTORE_DIR="/tmp/restore_$$"
@@ -145,42 +220,48 @@
       
       case $SERVICE in
         ldap)
-          echo -e "${GREEN}Restauration LDAP...${NC}"
-          scp $RESTORE_DIR/*/ldap_backup.tar.gz vagrant@192.168.10.10:/tmp/
-          ssh vagrant@192.168.10.10 "cd / && sudo tar xzf /tmp/ldap_backup.tar.gz"
-          ssh vagrant@192.168.10.10 "sudo systemctl restart slapd"
+          scp $RESTORE_DIR/*/ldap_backup.tar.gz vagrant@192.168.20.10:/tmp/
+          ssh vagrant@192.168.20.10 "cd / && sudo tar xzf /tmp/ldap_backup.tar.gz && sudo systemctl restart slapd"
           ;;
         nextcloud)
-          echo -e "${GREEN}Restauration Nextcloud...${NC}"
-          scp $RESTORE_DIR/*/nextcloud_backup.tar.gz vagrant@192.168.10.11:/tmp/
-          ssh vagrant@192.168.10.11 "cd / && sudo tar xzf /tmp/nextcloud_backup.tar.gz"
-          ssh vagrant@192.168.10.11 "sudo systemctl restart apache2 mariadb"
+          scp $RESTORE_DIR/*/nextcloud_backup.tar.gz vagrant@192.168.20.11:/tmp/
+          ssh vagrant@192.168.20.11 "cd / && sudo tar xzf /tmp/nextcloud_backup.tar.gz && sudo systemctl restart apache2 mariadb"
           ;;
         odoo)
-          echo -e "${GREEN}Restauration Odoo...${NC}"
-          scp $RESTORE_DIR/*/odoo_backup.tar.gz vagrant@192.168.10.12:/tmp/
-          ssh vagrant@192.168.10.12 "cd / && sudo tar xzf /tmp/odoo_backup.tar.gz"
-          ssh vagrant@192.168.10.12 "sudo systemctl restart odoo"
+          scp $RESTORE_DIR/*/odoo_backup.tar.gz vagrant@192.168.20.12:/tmp/
+          ssh vagrant@192.168.20.12 "cd / && sudo tar xzf /tmp/odoo_backup.tar.gz && sudo systemctl restart odoo"
           ;;
         badge)
-          echo -e "${GREEN}Restauration API Badges...${NC}"
-          scp $RESTORE_DIR/*/badge_backup.tar.gz vagrant@192.168.10.20:/tmp/
-          ssh vagrant@192.168.10.20 "cd / && sudo tar xzf /tmp/badge_backup.tar.gz"
-          ssh vagrant@192.168.10.20 "sudo systemctl restart badge-api"
+          scp $RESTORE_DIR/*/badge_backup.tar.gz vagrant@192.168.20.20:/tmp/
+          ssh vagrant@192.168.20.20 "cd / && sudo tar xzf /tmp/badge_backup.tar.gz && sudo systemctl restart badge-api"
+          ;;
+        mail)
+          scp $RESTORE_DIR/*/mail_backup.tar.gz vagrant@192.168.20.30:/tmp/
+          ssh vagrant@192.168.20.30 "cd / && sudo tar xzf /tmp/mail_backup.tar.gz && sudo systemctl restart docker"
+          ;;
+        wiki)
+          scp $RESTORE_DIR/*/wiki_backup.tar.gz vagrant@192.168.20.32:/tmp/
+          ssh vagrant@192.168.20.32 "cd / && sudo tar xzf /tmp/wiki_backup.tar.gz && sudo systemctl restart apache2"
+          ;;
+        vaultwarden)
+          scp $RESTORE_DIR/*/vaultwarden_backup.tar.gz vagrant@192.168.20.34:/tmp/
+          ssh vagrant@192.168.20.34 "cd / && sudo tar xzf /tmp/vaultwarden_backup.tar.gz && sudo systemctl restart docker"
+          ;;
+        nas)
+          tar xzf $RESTORE_DIR/*/nas_backup.tar.gz -C /
+          systemctl restart nfs-server smbd
           ;;
         all)
-          echo -e "${GREEN}Restauration complète...${NC}"
-          scp $RESTORE_DIR/*/*.tar.gz vagrant@192.168.10.10:/tmp/
-          ssh vagrant@192.168.10.10 "cd / && sudo tar xzf /tmp/ldap_backup.tar.gz && sudo systemctl restart slapd"
-          scp $RESTORE_DIR/*/nextcloud_backup.tar.gz vagrant@192.168.10.11:/tmp/
-          ssh vagrant@192.168.10.11 "cd / && sudo tar xzf /tmp/nextcloud_backup.tar.gz && sudo systemctl restart apache2 mariadb"
-          scp $RESTORE_DIR/*/odoo_backup.tar.gz vagrant@192.168.10.12:/tmp/
-          ssh vagrant@192.168.10.12 "cd / && sudo tar xzf /tmp/odoo_backup.tar.gz && sudo systemctl restart odoo"
-          scp $RESTORE_DIR/*/badge_backup.tar.gz vagrant@192.168.10.20:/tmp/
-          ssh vagrant@192.168.10.20 "cd / && sudo tar xzf /tmp/badge_backup.tar.gz && sudo systemctl restart badge-api"
-          ;;
-        *)
-          echo -e "${RED}Service inconnu${NC}"
+          scp $RESTORE_DIR/*/*.tar.gz vagrant@192.168.20.10:/tmp/
+          ssh vagrant@192.168.20.10 "cd / && sudo tar xzf /tmp/ldap_backup.tar.gz && sudo systemctl restart slapd"
+          scp $RESTORE_DIR/*/nextcloud_backup.tar.gz vagrant@192.168.20.11:/tmp/
+          ssh vagrant@192.168.20.11 "cd / && sudo tar xzf /tmp/nextcloud_backup.tar.gz && sudo systemctl restart apache2 mariadb"
+          scp $RESTORE_DIR/*/odoo_backup.tar.gz vagrant@192.168.20.12:/tmp/
+          ssh vagrant@192.168.20.12 "cd / && sudo tar xzf /tmp/odoo_backup.tar.gz && sudo systemctl restart odoo"
+          scp $RESTORE_DIR/*/badge_backup.tar.gz vagrant@192.168.20.20:/tmp/
+          ssh vagrant@192.168.20.20 "cd / && sudo tar xzf /tmp/badge_backup.tar.gz && sudo systemctl restart badge-api"
+          tar xzf $RESTORE_DIR/*/nas_backup.tar.gz -C /
+          systemctl restart nfs-server smbd
           ;;
       esac
       
@@ -195,11 +276,17 @@
     job: "/usr/local/bin/backup.sh"
     user: root
 
-- name: Créer le répertoire de logs
-  file:
-    path: /var/log
-    state: directory
-    mode: 0755
+- name: Ouvrir les ports
+  ufw:
+    rule: allow
+    port: "{{ item }}"
+    proto: tcp
+  loop:
+    - 2049
+    - 445
+    - 139
+    - 111
+  ignore_errors: yes
 
 - name: Tester Restic
   command: /usr/local/bin/restic -r /backup/seimp snapshots
@@ -215,7 +302,16 @@
       📁 Dépôt: /backup/seimp
       🔐 Mot de passe: SEIMP_Restic_Backup_2024!
       
-      Commandes utiles :
-      - Voir les snapshots: restic -r /backup/seimp snapshots
-      - Restaurer: /usr/local/bin/restore.sh
+      📡 Services sauvegardés :
+      - LDAP, Portail, Nextcloud, Odoo, Badge
+      - Mail, Wiki, Vaultwarden, Metabase, n8n, Plane
+      - Données NAS (documents, factures, employés)
+      
+      💾 Points de montage NAS :
+      - NFS : mount -t nfs 192.168.20.21:/srv/nfs /mnt/nas
+      - Samba : \\192.168.20.21\documents
+      
+      📝 Commandes utiles :
       - Backup manuel: /usr/local/bin/backup.sh
+      - Restauration: /usr/local/bin/restore.sh
+      - Voir snapshots: restic -r /backup/seimp snapshots

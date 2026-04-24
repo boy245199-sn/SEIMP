@@ -1,5 +1,5 @@
 ---
-- name: Mettre à jour les paquets
+- name: Mettre a jour les paquets
   apt:
     update_cache: yes
     upgrade: dist
@@ -9,7 +9,7 @@
     name: nginx
     state: present
 
-- name: Créer le répertoire du site
+- name: Creer le repertoire du site
   file:
     path: /var/www/portail
     state: directory
@@ -17,36 +17,56 @@
     group: www-data
     mode: '0755'
 
-- name: Déployer le fichier HTML du portail
+- name: Deployer le fichier HTML du portail
   copy:
     src: bienvenue.html
     dest: /var/www/portail/index.html
     owner: www-data
     group: www-data
     mode: '0644'
-  notify: Redémarrer nginx
+  notify: Redemarrer nginx
 
-- name: Déployer la configuration nginx
+- name: Deployer l image de fond principale
+  copy:
+    src: background.jpg
+    dest: /var/www/portail/background.jpg
+    owner: www-data
+    group: www-data
+    mode: '0644'
+
+- name: Deployer les images de fond
+  copy:
+    src: "{{ item }}"
+    dest: "/var/www/portail/{{ item }}"
+    owner: www-data
+    group: www-data
+    mode: '0644'
+  loop:
+    - background2.jpg
+    - background3.png
+    - background4.png
+
+- name: Deployer la configuration nginx
   template:
     src: portail.conf.j2
     dest: /etc/nginx/sites-available/portail
     mode: '0644'
-  notify: Redémarrer nginx
+  notify: Redemarrer nginx
 
 - name: Activer le site nginx
   file:
     src: /etc/nginx/sites-available/portail
     dest: /etc/nginx/sites-enabled/portail
     state: link
-  notify: Redémarrer nginx
+  notify: Redemarrer nginx
 
-- name: Désactiver le site nginx par défaut
+- name: Desactiver le site nginx par defaut
   file:
     path: /etc/nginx/sites-enabled/default
     state: absent
-  notify: Redémarrer nginx
+  notify: Redemarrer nginx
 
-- name: S'assurer que nginx est démarré et activé
+- name: Demarrer et activer nginx
   service:
     name: nginx
     state: started
